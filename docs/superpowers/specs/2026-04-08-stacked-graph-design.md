@@ -53,8 +53,9 @@ Single-column, top-to-bottom:
 ## CSV Input
 
 - A `<textarea>` at the top, collapsed by default, expandable via a toggle button.
-- User pastes raw CSV text.
-- On input change, `csv.js` parses the text using vanilla JS (no library dependency — comma-separated, first row is headers).
+- A **"Generate Sample Data"** button next to the toggle fills the textarea with realistic synthetic CSV data (12 months, multiple accounts/categories, mix of income and expenses). This lets users explore the app immediately without their own data.
+- User pastes raw CSV text, edits it directly in the textarea, or uses the generated sample. The textarea is always editable.
+- On input change (debounced ~300ms), `csv.js` parses the text using vanilla JS (no library dependency — comma-separated, first row is headers).
 - Expected columns in `all.csv`: `statement_type`, `statement_date`, `account`, `entry_type`, `transaction_date`, `effective_date`, `category`, `description`, `amount`.
 - If parsing fails (bad CSV), show an inline error message below the textarea.
 
@@ -84,7 +85,7 @@ The set of available CC accounts is derived at parse time from unique values in 
 ## Data Aggregation
 
 1. Parse `amount` as a float. Positive = income, negative = expense.
-2. Parse the chosen date column; group rows by `YYYY-MM`.
+2. Parse the chosen date column. Date format is `YYYY-MM-DD`. Extract `YYYY-MM` to bin by month.
 3. For each month, sum `amount` per unique value in the chosen stack-by column.
 4. Pass the result to Chart.js as one dataset per stack-by value.
 
@@ -120,6 +121,25 @@ Each card shows:
 Calculated from the currently filtered/visible data (respects checkbox filters).
 
 Income = sum of all positive `amount` rows. Expenses = sum of all negative `amount` rows (displayed as a positive number). Net = income + expenses (sum of all amounts).
+
+---
+
+## Persistence (localStorage)
+
+All user settings are saved to `localStorage` as they change and restored on startup before any rendering. If localStorage values are present, they take precedence over defaults.
+
+Persisted keys (all under a `sg_` namespace, e.g. `sg_csv`):
+
+| Key | What it stores |
+|---|---|
+| `sg_csv` | Raw CSV text currently in the textarea |
+| `sg_date_col` | Selected date column name |
+| `sg_stack_col` | Selected stack-by column name |
+| `sg_filters` | Checkbox states (show all CC, replace CU pay, picked CC accounts) |
+| `sg_hidden_series` | Array of series labels toggled off in the color key |
+| `sg_csv_collapsed` | Whether the CSV textarea panel is collapsed |
+
+On startup, `main.js` reads all `sg_*` keys, populates the textarea and controls, then triggers a parse + render.
 
 ---
 

@@ -1,5 +1,7 @@
 # Stacked Graph
 
+Try here: https://alpiepho.github.io/stacked_graph_claude/
+
 A progressive web app for visualizing personal financial CSV data as an interactive stacked bar chart, binned by month.
 
 ## Features

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/stacked_graph/',
+  base: '/stacked_graph_claude/',
   test: {
     environment: 'jsdom',
     setupFiles: ['tests/setup.js']

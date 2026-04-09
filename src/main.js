@@ -86,6 +86,7 @@ function _render() {
     chartData,
     settings.hiddenSeries,
     (label, visible) => {
+      settings.hiddenSeries = settings.hiddenSeries ?? []
       if (visible) {
         settings.hiddenSeries = settings.hiddenSeries.filter(s => s !== label)
       } else {

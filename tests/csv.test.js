@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCSV, detectDateColumn } from '../src/csv.js'
+import { parseCSV, detectDateColumn, generateSampleData } from '../src/csv.js'
 
 describe('parseCSV', () => {
   it('returns headers and rows from valid CSV', () => {
@@ -41,5 +41,33 @@ describe('detectDateColumn', () => {
 
   it('falls back to first column when no date column found', () => {
     expect(detectDateColumn(['account', 'amount', 'category'])).toBe('account')
+  })
+})
+
+describe('generateSampleData', () => {
+  it('returns a parseable CSV string', () => {
+    const text = generateSampleData()
+    expect(() => parseCSV(text)).not.toThrow()
+  })
+
+  it('has the expected headers', () => {
+    const { headers } = parseCSV(generateSampleData())
+    expect(headers).toContain('statement_type')
+    expect(headers).toContain('transaction_date')
+    expect(headers).toContain('amount')
+    expect(headers).toContain('account')
+  })
+
+  it('covers at least 6 distinct months', () => {
+    const { rows } = parseCSV(generateSampleData())
+    const months = new Set(rows.map(r => r.transaction_date?.slice(0, 7)))
+    expect(months.size).toBeGreaterThanOrEqual(6)
+  })
+
+  it('includes both positive and negative amounts', () => {
+    const { rows } = parseCSV(generateSampleData())
+    const amounts = rows.map(r => parseFloat(r.amount))
+    expect(amounts.some(a => a > 0)).toBe(true)
+    expect(amounts.some(a => a < 0)).toBe(true)
   })
 })

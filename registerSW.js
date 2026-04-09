@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/stacked_graph/sw.js', { scope: '/stacked_graph/' })})}

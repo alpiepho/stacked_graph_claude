@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stacked Graph</title>
+</head>
+<body>
+  <div id="app">
+
+    <!-- CSV Input -->
+    <div class="section">
+      <div class="section-header">
+        <button id="csv-toggle" class="toggle-btn">▼ CSV Data</button>
+        <button id="sample-btn" class="secondary-btn">Generate Sample Data</button>
+      </div>
+      <div id="csv-panel">
+        <textarea
+          id="csv-input"
+          placeholder="Paste CSV data here (headers required)..."
+          spellcheck="false"
+        ></textarea>
+        <div id="csv-error" class="error-msg hidden"></div>
+      </div>
+    </div>
+
+    <!-- Column Pickers -->
+    <div class="section hidden" id="column-section">
+      <label>Date column <select id="date-col"></select></label>
+      <label>Stack by <select id="stack-col"></select></label>
+    </div>
+
+    <!-- Filters -->
+    <div class="section hidden" id="filter-section">
+      <label><input type="checkbox" id="filter-show-all-cc" checked> Show all CC accounts individually</label>
+      <label><input type="checkbox" id="filter-replace-cu"> Replace CU credit card payment with CC details</label>
+      <div id="filter-pick-cc" class="hidden"></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="section hidden" id="chart-section">
+      <div class="chart-scroll">
+        <canvas id="chart-canvas"></canvas>
+      </div>
+      <div id="legend"></div>
+    </div>
+
+    <!-- Summary -->
+    <div class="section hidden" id="summary-section">
+      <div class="summary-cards">
+        <div id="summary-income" class="summary-card income"></div>
+        <div id="summary-expenses" class="summary-card expenses"></div>
+        <div id="summary-net" class="summary-card net"></div>
+      </div>
+    </div>
+
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -4,7 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   base: '/stacked_graph/',
   test: {
-    environment: 'jsdom'
+    environment: 'jsdom',
+    setupFiles: ['tests/setup.js']
   },
   plugins: [
     VitePWA({

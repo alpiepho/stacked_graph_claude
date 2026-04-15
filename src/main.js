@@ -44,6 +44,7 @@ let _lastDateCol   = null
 let _lastStackCol  = null
 let _lastChartData = { months: [], series: [] }
 let _dumpActive    = false  // true while a transaction dump is displayed; suppresses _showDebug overwrites
+let _lastWorkingRows = []   // filtered rows after sign inversion (matches what the chart shows)
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 function init() {
@@ -90,17 +91,27 @@ function _render() {
   }
 
   const filtered    = applyFilters(rows, filters)
-  const chartData   = aggregate(filtered, dateCol, stackCol)
-  _lastFiltered   = filtered
-  _lastDateCol    = dateCol
-  _lastStackCol   = stackCol
-  _lastChartData  = chartData
+
+  // Apply per-series sign inversion (for CC accounts where debits are positive)
+  const inverted = settings.invertedAccounts ?? []
+  const workingRows = inverted.length === 0 ? filtered : filtered.map(row => {
+    if (!inverted.includes(row[stackCol])) return row
+    const amt = parseFloat(row.amount) || 0
+    return { ...row, amount: String(-amt) }
+  })
+
+  const chartData   = aggregate(workingRows, dateCol, stackCol)
+  _lastFiltered    = filtered
+  _lastWorkingRows = workingRows
+  _lastDateCol     = dateCol
+  _lastStackCol    = stackCol
+  _lastChartData   = chartData
   _showDebug(rows, filtered, dateCol, stackCol, chartData, filters)
-  const summary     = calcSummary(filtered, dateCol)
+  const summary     = calcSummary(workingRows, dateCol)
 
   // Build per-month income/expenses/net arrays aligned to the chart's month labels
   const byMonth = {}
-  filtered.forEach(row => {
+  workingRows.forEach(row => {
     const month = row[dateCol]?.slice(0, 7)
     if (!month) return
     if (!byMonth[month]) byMonth[month] = { income: 0, expenses: 0 }
@@ -137,6 +148,15 @@ function _render() {
     (month, label) => {
       _hoveredMonth = month
       _hoveredLabel = label
+    },
+    settings.invertedAccounts ?? [],
+    (label) => {
+      const inv = settings.invertedAccounts ?? []
+      settings.invertedAccounts = inv.includes(label)
+        ? inv.filter(l => l !== label)
+        : [...inv, label]
+      save('inverted_accounts', settings.invertedAccounts)
+      _render()
     }
   )
 
@@ -358,7 +378,7 @@ document.addEventListener('keydown', e => {
   if (key === 't') {
     if (!_hoveredMonth || !_hoveredLabel) return
     const isLine = LINE_LABELS.includes(_hoveredLabel)
-    const matchingRows = _lastFiltered.filter(row => {
+    const matchingRows = _lastWorkingRows.filter(row => {
       const month = row[_lastDateCol]?.slice(0, 7)
       if (month !== _hoveredMonth) return false
       return isLine || row[_lastStackCol] === _hoveredLabel
@@ -367,10 +387,10 @@ document.addEventListener('keydown', e => {
   }
 
   if (key === 'a') {
-    if (!_hoveredMonth || _lastFiltered.length === 0) return
+    if (!_hoveredMonth || _lastWorkingRows.length === 0) return
 
     // All transactions for the hovered month, then one section per series
-    const monthRows = _lastFiltered.filter(row =>
+    const monthRows = _lastWorkingRows.filter(row =>
       row[_lastDateCol]?.slice(0, 7) === _hoveredMonth
     )
     const sections = [{ title: `All transactions — ${_hoveredMonth}`, rows: monthRows }]
@@ -413,14 +433,21 @@ function _showTransactionDump(sections) {
         rpad(amtStr,         colW.amount),
       ].join('  ')
     })
-    const total    = txRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+    let deposits = 0, debits = 0
+    txRows.forEach(r => {
+      const amt = parseFloat(r.amount) || 0
+      if (amt >= 0) deposits += amt; else debits += Math.abs(amt)
+    })
+    const total    = deposits - debits
     const totalStr = (total >= 0 ? '+' : '') + total.toFixed(2)
+    const subtotal = `  Deposits: +${deposits.toFixed(2)}    Debits: -${debits.toFixed(2)}`
     return [
       `── ${title} (${txRows.length} rows) ──`,
       SEP, hdr, SEP,
       ...dataLines,
       SEP,
-      `  ${txRows.length} rows    Total: ${totalStr}`,
+      subtotal,
+      `  ${txRows.length} rows    Net: ${totalStr}`,
     ].join('\n')
   }
 

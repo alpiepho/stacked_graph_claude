@@ -26,13 +26,16 @@ let chartInstance = null
  * @param {{ income: boolean, expenses: boolean, net: boolean }} linesVisible
  * @param {function(string, boolean): void} onLineToggle - called with (key, isVisible)
  * @param {function(string|null, string|null): void} [onElementHover] - called with (month, seriesLabel) on hover; null when leaving
+ * @param {string[]} invertedAccounts - series labels whose amounts are currently inverted
+ * @param {function(string): void} onInvertToggle - called with series label when ± is clicked
  */
 export function renderChart(
   canvas, legendContainer,
   { months, series },
   hiddenSeries, onLegendToggle,
   lineData, linesVisible, onLineToggle,
-  onElementHover
+  onElementHover,
+  invertedAccounts, onInvertToggle
 ) {
   if (chartInstance) {
     chartInstance.destroy()
@@ -126,7 +129,7 @@ export function renderChart(
     }
   })
 
-  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle)
+  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, invertedAccounts ?? [], onInvertToggle)
 }
 
 /**
@@ -135,8 +138,10 @@ export function renderChart(
  * @param {Object[]} lineDatasets
  * @param {function(string, boolean): void} onBarToggle
  * @param {function(string, boolean): void} onLineToggle
+ * @param {string[]} invertedAccounts
+ * @param {function(string): void} onInvertToggle
  */
-function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle) {
+function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, invertedAccounts, onInvertToggle) {
   container.innerHTML = ''
 
   // Bar entries
@@ -162,7 +167,16 @@ function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLine
     const label = document.createElement('span')
     label.textContent = ds.label
 
-    row.append(cb, swatch, label)
+    const invertBtn = document.createElement('button')
+    invertBtn.className = 'legend-invert-btn' + (invertedAccounts.includes(ds.label) ? ' active' : '')
+    invertBtn.textContent = '±'
+    invertBtn.title = 'Invert sign for this account (use for CC accounts where debits are positive)'
+    invertBtn.addEventListener('click', e => {
+      e.stopPropagation()
+      onInvertToggle?.(ds.label)
+    })
+
+    row.append(cb, swatch, label, invertBtn)
     container.appendChild(row)
   })
 

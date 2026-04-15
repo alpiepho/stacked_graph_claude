@@ -58,7 +58,7 @@ function seededRandom(seed) {
 
 /**
  * Generate realistic sample financial CSV data covering 12 months.
- * Includes checking account (CU) and two credit cards.
+ * Includes 10 accounts: 3 bank/CU, 4 credit cards, 3 other.
  * Amounts vary month-to-month using a fixed seed for reproducibility.
  * @returns {string} CSV text
  */
@@ -67,49 +67,93 @@ export function generateSampleData() {
   const rows = []
   const year = 2024
   const rnd = seededRandom(42)
-  // Return a varied amount: base ± (pct * base), always positive
   const vary = (base, pct) => (base * (1 + (rnd() - 0.5) * 2 * pct)).toFixed(2)
+  const row = (acct, day, cat, desc, amt, mm) => {
+    const dt = `${year}-${mm}-${String(day).padStart(2, '0')}`
+    return `transaction,${dt},${acct},transaction,${dt},${dt},${cat},${desc},${amt}`
+  }
 
   for (let m = 1; m <= 12; m++) {
     const mm = String(m).padStart(2, '0')
-    const d = (day) => `${year}-${mm}-${String(day).padStart(2, '0')}`
 
-    // Seasonal factor: higher spending in summer (6-8) and winter (11-12)
-    const seasonal = [6, 7, 8].includes(m) ? 1.2 : [11, 12].includes(m) ? 1.3 : 1.0
+    // Seasonal factors
+    const seasonal  = [6, 7, 8].includes(m) ? 1.2 : [11, 12].includes(m) ? 1.35 : 1.0
+    const coldMonth = [1, 2, 11, 12].includes(m)
+    const hotMonth  = [6, 7, 8].includes(m)
 
-    // Income: paycheck deposited to checking (fixed)
-    rows.push(`transaction,${d(1)},Checking,transaction,${d(1)},${d(1)},Income,Monthly Salary,3500.00`)
+    // ── Checking (main CU) ──────────────────────────────────────────────────
+    rows.push(row('Checking', 1,  'Income',   'Monthly Salary',       '3500.00',               mm))
+    rows.push(row('Checking', 1,  'Housing',  'Apartment Rent',       '-1200.00',              mm))
+    rows.push(row('Checking', 14, 'Transfer', 'Transfer to Savings',  '-500.00',               mm))
 
-    // Rent from checking (fixed)
-    rows.push(`transaction,${d(1)},Checking,transaction,${d(1)},${d(1)},Housing,Apartment Rent,-1200.00`)
+    // ── Savings ─────────────────────────────────────────────────────────────
+    rows.push(row('Savings',  14, 'Transfer', 'Transfer from Checking', '500.00',              mm))
+    rows.push(row('Savings',  28, 'Interest', 'Monthly Interest',      vary(9, 0.25),           mm))
 
-    // Visa transactions (varying)
-    const groceries = vary(200 * seasonal, 0.30)
-    const restaurant = vary(150 * seasonal, 0.50)
-    const netflix    = '50.00'
-    const amazon     = vary(250 * seasonal, 0.60)
-    rows.push(`transaction,${d(5)},visa_card,transaction,${d(5)},${d(5)},Groceries,Whole Foods,-${groceries}`)
-    rows.push(`transaction,${d(12)},visa_card,transaction,${d(12)},${d(12)},Dining,Restaurant,-${restaurant}`)
-    rows.push(`transaction,${d(20)},visa_card,transaction,${d(20)},${d(20)},Entertainment,Netflix,-${netflix}`)
-    rows.push(`transaction,${d(22)},visa_card,transaction,${d(22)},${d(22)},Shopping,Amazon,-${amazon}`)
+    // ── Business Checking ───────────────────────────────────────────────────
+    const consulting = vary(2200 * (rnd() > 0.25 ? 1 : 0.5), 0.40) // occasional low months
+    rows.push(row('Business Checking', 5,  'Income',  'Consulting Payment',    consulting,    mm))
+    rows.push(row('Business Checking', 10, 'Software','SaaS Subscriptions',   `-${vary(140, 0.25)}`, mm))
+    rows.push(row('Business Checking', 20, 'Office',  'Office Supplies',      `-${vary(65, 0.55)}`,  mm))
 
-    // Mastercard transactions (varying; electric bill peaks in winter/summer)
-    const electricBase = [6, 7, 8, 11, 12, 1, 2].includes(m) ? 160 : 90
-    const electric   = vary(electricBase, 0.20)
-    const traderjoes = vary(130 * seasonal, 0.35)
-    const gas        = vary(100, 0.40)
-    rows.push(`transaction,${d(8)},mastercard,transaction,${d(8)},${d(8)},Utilities,Electric Bill,-${electric}`)
-    rows.push(`transaction,${d(18)},mastercard,transaction,${d(18)},${d(18)},Groceries,Trader Joes,-${traderjoes}`)
-    rows.push(`transaction,${d(25)},mastercard,transaction,${d(25)},${d(25)},Gas,Shell Gas,-${gas}`)
+    // ── visa_card ───────────────────────────────────────────────────────────
+    const visa_groceries = vary(210 * seasonal, 0.30)
+    const visa_dining    = vary(140 * seasonal, 0.55)
+    const visa_amazon    = vary(180 * seasonal, 0.65)
+    rows.push(row('visa_card', 4,  'Groceries', 'Whole Foods',          `-${visa_groceries}`,  mm))
+    rows.push(row('visa_card', 11, 'Dining',    'Restaurants',          `-${visa_dining}`,     mm))
+    rows.push(row('visa_card', 19, 'Shopping',  'Amazon',               `-${visa_amazon}`,     mm))
 
-    // CU CC payments — match the actual CC spend so replaceCUPay gives accurate totals
-    const visaTotal = (parseFloat(groceries) + parseFloat(restaurant) + parseFloat(netflix) + parseFloat(amazon)).toFixed(2)
-    const mcTotal   = (parseFloat(electric) + parseFloat(traderjoes) + parseFloat(gas)).toFixed(2)
-    rows.push(`transaction,${d(15)},Checking,transaction,${d(15)},${d(15)},CC Payment,credit card payment,-${visaTotal}`)
-    rows.push(`transaction,${d(16)},Checking,transaction,${d(16)},${d(16)},CC Payment,credit card payment,-${mcTotal}`)
+    // ── mastercard ──────────────────────────────────────────────────────────
+    const electricBase  = coldMonth ? 175 : hotMonth ? 155 : 85
+    const mc_electric   = vary(electricBase, 0.18)
+    const mc_groceries  = vary(120 * seasonal, 0.35)
+    const mc_clothing   = vary(90 * seasonal, 0.70)
+    rows.push(row('mastercard', 6,  'Utilities', 'Electric Bill',        `-${mc_electric}`,    mm))
+    rows.push(row('mastercard', 13, 'Groceries', 'Trader Joes',          `-${mc_groceries}`,   mm))
+    rows.push(row('mastercard', 22, 'Clothing',  'Department Store',     `-${mc_clothing}`,    mm))
 
-    // Balance rows — informational only, not graphed
-    rows.push(`balance,${d(28)},Checking,transaction,${d(28)},${d(28)},Balance,End of Month Balance,${(2000 + m * 50).toFixed(2)}`)
+    // ── discover_card ───────────────────────────────────────────────────────
+    const disc_gas       = vary(95, 0.40)
+    const disc_streaming = '15.99'  // fixed
+    const disc_dining    = vary(75 * seasonal, 0.50)
+    rows.push(row('discover_card', 3,  'Gas',           'Shell Gas',     `-${disc_gas}`,       mm))
+    rows.push(row('discover_card', 15, 'Streaming',     'Hulu',          `-${disc_streaming}`, mm))
+    rows.push(row('discover_card', 21, 'Dining',        'Fast Food',     `-${disc_dining}`,    mm))
+
+    // ── amex_card ───────────────────────────────────────────────────────────
+    const amex_gym      = '79.00'  // fixed membership
+    const amex_dining   = vary(110 * seasonal, 0.50)
+    const amex_travel   = [3, 7, 9, 11].includes(m) ? `-${vary(420, 0.35)}` : null // travel months
+    rows.push(row('amex_card', 2,  'Health',   'Gym Membership',        `-${amex_gym}`,        mm))
+    rows.push(row('amex_card', 16, 'Dining',   'Fine Dining',           `-${amex_dining}`,     mm))
+    if (amex_travel) rows.push(row('amex_card', 23, 'Travel', 'Hotel / Airfare', amex_travel, mm))
+
+    // ── PayPal ──────────────────────────────────────────────────────────────
+    const paypal_purchase = vary(85, 0.75)
+    if (rnd() > 0.30) rows.push(row('PayPal', 9, 'Shopping', 'eBay Purchase', `-${paypal_purchase}`, mm))
+    rows.push(row('PayPal', 24, 'Services', 'Online Services', `-${vary(28, 0.45)}`, mm))
+
+    // ── Venmo ───────────────────────────────────────────────────────────────
+    rows.push(row('Venmo', 1,  'Transfer', 'Roommate Rent Split',  `${vary(650, 0.04)}`, mm))
+    rows.push(row('Venmo', 17, 'Dining',   'Group Dinner Split',  `-${vary(38, 0.55)}`, mm))
+
+    // ── Investment ──────────────────────────────────────────────────────────
+    rows.push(row('Investment', 15, 'Dividends', 'Dividend Income',      vary(130, 0.30),       mm))
+    rows.push(row('Investment', 15, 'Deposit',   'Monthly Contribution', vary(300, 0.10),       mm))
+
+    // ── CU CC payments from Checking (match actual CC spend) ────────────────
+    const visaTotal = (parseFloat(visa_groceries) + parseFloat(visa_dining) + parseFloat(visa_amazon)).toFixed(2)
+    const mcTotal   = (parseFloat(mc_electric) + parseFloat(mc_groceries) + parseFloat(mc_clothing)).toFixed(2)
+    const discTotal = (parseFloat(disc_gas) + parseFloat(disc_streaming) + parseFloat(disc_dining)).toFixed(2)
+    const amexTotal = (parseFloat(amex_gym) + parseFloat(amex_dining) + (amex_travel ? parseFloat(amex_travel.replace('-','')) : 0)).toFixed(2)
+    rows.push(row('Checking', 15, 'CC Payment', 'credit card payment', `-${visaTotal}`, mm))
+    rows.push(row('Checking', 16, 'CC Payment', 'credit card payment', `-${mcTotal}`,   mm))
+    rows.push(row('Checking', 17, 'CC Payment', 'credit card payment', `-${discTotal}`, mm))
+    rows.push(row('Checking', 18, 'CC Payment', 'credit card payment', `-${amexTotal}`, mm))
+
+    // ── Balance rows — not graphed (entry_type=balance) ─────────────────────
+    rows.push(`balance,${year}-${mm}-28,Checking,balance,${year}-${mm}-28,${year}-${mm}-28,Balance,End of Month Balance,${vary(8000, 0.15)}`)
   }
 
   return [header, ...rows].join('\n')

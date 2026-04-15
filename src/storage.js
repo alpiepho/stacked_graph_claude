@@ -33,7 +33,8 @@ export function load(key, defaultValue = null) {
  *   stackCol: string|null,
  *   filters: { showAllCC: boolean, replaceCUPay: boolean, pickedCC: string[] },
  *   hiddenSeries: string[],
- *   csvCollapsed: boolean
+ *   csvCollapsed: boolean,
+ *   linesVisible: { income: boolean, expenses: boolean, net: boolean }
  * }}
  */
 export function loadAll() {
@@ -43,6 +44,7 @@ export function loadAll() {
     stackCol:     load('stack_col', null),
     filters:      load('filters', { showAllCC: true, replaceCUPay: false, pickedCC: [] }),
     hiddenSeries: load('hidden_series', []),
-    csvCollapsed: load('csv_collapsed', true)
+    csvCollapsed: load('csv_collapsed', true),
+    linesVisible: load('lines_visible', { income: true, expenses: true, net: true })
   }
 }

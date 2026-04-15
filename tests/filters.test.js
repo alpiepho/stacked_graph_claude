@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { isCCRow, isCUCCPayment, getCCAccounts, applyFilters } from '../src/filters.js'
 
 const sampleRows = [
-  { statement_type: 'transaction', account: 'Checking', description: 'Monthly Salary',      amount: '3500' },
-  { statement_type: 'transaction', account: 'Checking', description: 'credit card payment', amount: '-650' },
-  { statement_type: 'transaction', account: 'visa_card',   description: 'Whole Foods',      amount: '-200' },
-  { statement_type: 'transaction', account: 'visa_card',   description: 'Netflix',          amount: '-50'  },
-  { statement_type: 'transaction', account: 'mastercard',  description: 'Electric Bill',    amount: '-120' },
-  { statement_type: 'balance',     account: 'Checking',   description: 'End Balance',       amount: '10000' },
+  { statement_type: 'cu_statement', entry_type: 'transaction', account: 'Checking',    description: 'Monthly Salary',      amount: '3500' },
+  { statement_type: 'cu_statement', entry_type: 'transaction', account: 'Checking',    description: 'credit card payment', amount: '-650' },
+  { statement_type: 'cu_statement', entry_type: 'transaction', account: 'visa_card',   description: 'Whole Foods',         amount: '-200' },
+  { statement_type: 'cu_statement', entry_type: 'transaction', account: 'visa_card',   description: 'Netflix',             amount: '-50'  },
+  { statement_type: 'cu_statement', entry_type: 'transaction', account: 'mastercard',  description: 'Electric Bill',       amount: '-120' },
+  { statement_type: 'cu_statement', entry_type: 'balance',     account: 'Checking',    description: 'End Balance',         amount: '10000' },
 ]
 
 describe('isCCRow', () => {

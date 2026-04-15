@@ -35,8 +35,8 @@ export function getCCAccounts(rows) {
  * @returns {Object[]}
  */
 export function applyFilters(rows, { showAllCC, replaceCUPay, pickedCC }) {
-  // Only graph transaction rows; skip balance rows
-  let filtered = rows.filter(r => r.statement_type?.toLowerCase() === 'transaction')
+  // Only graph transaction entries; skip balance entries
+  let filtered = rows.filter(r => r.entry_type?.toLowerCase() === 'transaction')
 
   // Remove CU rows that are CC payments
   if (replaceCUPay) {

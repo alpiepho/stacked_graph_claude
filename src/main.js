@@ -1,7 +1,7 @@
 import './style.css'
 import { parseCSV, detectDateColumn, detectStackColumn, generateSampleData } from './csv.js'
 import { aggregate } from './aggregate.js'
-import { applyFilters, getCCAccounts } from './filters.js'
+import { applyFilters, getCCAccounts, isCCRow } from './filters.js'
 import { calcSummary } from './summary.js'
 import { save, loadAll } from './storage.js'
 import { renderChart } from './chart.js'
@@ -26,11 +26,24 @@ const legendDiv    = document.getElementById('legend')
 const summaryIncome   = document.getElementById('summary-income')
 const summaryExpenses = document.getElementById('summary-expenses')
 const summaryNet      = document.getElementById('summary-net')
+const debugSection    = document.getElementById('debug-section')
+const debugOutput     = document.getElementById('debug-output')
+const debugClose      = document.getElementById('debug-close')
+const debugCopy       = document.getElementById('debug-copy')
 
 // ── App state ────────────────────────────────────────────────────────────────
 let rows = []
 let headers = []
 const settings = loadAll()
+
+// Hover + dump state
+let _hoveredMonth  = null
+let _hoveredLabel  = null
+let _lastFiltered  = []
+let _lastDateCol   = null
+let _lastStackCol  = null
+let _lastChartData = { months: [], series: [] }
+let _dumpActive    = false  // true while a transaction dump is displayed; suppresses _showDebug overwrites
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 function init() {
@@ -78,7 +91,28 @@ function _render() {
 
   const filtered    = applyFilters(rows, filters)
   const chartData   = aggregate(filtered, dateCol, stackCol)
+  _lastFiltered   = filtered
+  _lastDateCol    = dateCol
+  _lastStackCol   = stackCol
+  _lastChartData  = chartData
+  _showDebug(rows, filtered, dateCol, stackCol, chartData, filters)
   const summary     = calcSummary(filtered, dateCol)
+
+  // Build per-month income/expenses/net arrays aligned to the chart's month labels
+  const byMonth = {}
+  filtered.forEach(row => {
+    const month = row[dateCol]?.slice(0, 7)
+    if (!month) return
+    if (!byMonth[month]) byMonth[month] = { income: 0, expenses: 0 }
+    const amount = parseFloat(row.amount) || 0
+    if (amount > 0) byMonth[month].income += amount
+    else byMonth[month].expenses += Math.abs(amount)
+  })
+  const lineData = {
+    income:   chartData.months.map(m => byMonth[m]?.income   ?? 0),
+    expenses: chartData.months.map(m => byMonth[m]?.expenses ?? 0),
+    net:      chartData.months.map(m => (byMonth[m]?.income ?? 0) - (byMonth[m]?.expenses ?? 0)),
+  }
 
   renderChart(
     chartCanvas,
@@ -93,6 +127,16 @@ function _render() {
         if (!settings.hiddenSeries.includes(label)) settings.hiddenSeries.push(label)
       }
       save('hidden_series', settings.hiddenSeries)
+    },
+    lineData,
+    settings.linesVisible,
+    (key, visible) => {
+      settings.linesVisible = { ...settings.linesVisible, [key]: visible }
+      save('lines_visible', settings.linesVisible)
+    },
+    (month, label) => {
+      _hoveredMonth = month
+      _hoveredLabel = label
     }
   )
 
@@ -216,6 +260,173 @@ function _onFilterChange() {
 
 showAllCCCb.addEventListener('change', _onFilterChange)
 replaceCUCb.addEventListener('change', _onFilterChange)
+
+// ── Debug ────────────────────────────────────────────────────────────────────
+function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters) {
+  if (_dumpActive) return  // don't overwrite an active transaction dump
+  const counts = (arr, key) => {
+    const map = {}
+    arr.forEach(r => { const v = r[key] ?? '(blank)'; map[v] = (map[v] || 0) + 1 })
+    return Object.entries(map).sort((a, b) => b[1] - a[1])
+      .map(([v, n]) => `  "${v}" × ${n}`).join('\n')
+  }
+
+  const amountSamples = allRows.slice(0, 5).map(r => {
+    const raw = r.amount
+    const parsed = parseFloat(raw)
+    return `  "${raw}" → ${isNaN(parsed) ? 'NaN ⚠' : parsed}`
+  }).join('\n')
+
+  const dateSamples = allRows.slice(0, 3).map(r =>
+    `  "${r[dateCol]}" → month "${r[dateCol]?.slice(0, 7) ?? '?'}"`
+  ).join('\n')
+
+  // Unique accounts in filtered rows (what actually reaches aggregate)
+  const filteredAccountMap = {}
+  filteredRows.forEach(r => {
+    const v = r.account ?? '(blank)'
+    filteredAccountMap[v] = (filteredAccountMap[v] || 0) + 1
+  })
+  const filteredAccounts = Object.entries(filteredAccountMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([v, n]) => `  "${v}" × ${n}`)
+    .join('\n')
+
+  // CC detection: show which accounts isCCRow considers credit cards
+  const ccDetected = Object.keys(filteredAccountMap)
+    .filter(acc => isCCRow({ account: acc }))
+
+  debugOutput.textContent = [
+    `Total rows parsed:          ${allRows.length}`,
+    `Rows after entry_type filter: ${filteredRows.length}  ← should be > 0`,
+    ``,
+    `── Active settings ──`,
+    `  Stack by column: "${stackCol}"`,
+    `  Show all CC individually: ${filters.showAllCC}`,
+    `  Replace CU CC payments:   ${filters.replaceCUPay}`,
+    `  Picked CC accounts: [${filters.pickedCC.map(a => `"${a}"`).join(', ')}]`,
+    ``,
+    `── Chart series (${chartData.series.length} total → one checkbox each) ──`,
+    chartData.series.length === 0
+      ? '  (none — check stack column and filter settings)'
+      : chartData.series.map(s => `  "${s.label}"`).join('\n'),
+    ``,
+    `── Accounts in filtered rows (${Object.keys(filteredAccountMap).length} unique) ──`,
+    filteredAccounts || '  (none)',
+    ``,
+    `── CC detection (accounts matched as credit cards) ──`,
+    ccDetected.length === 0
+      ? '  (none — CC filter/merge has no effect)'
+      : ccDetected.map(a => `  "${a}"  ← treated as CC`).join('\n'),
+    ``,
+    `── Raw data ──`,
+    `entry_type values (all rows):`,
+    counts(allRows, 'entry_type'),
+    ``,
+    `amount samples (first 5):`,
+    amountSamples,
+    ``,
+    `${dateCol} samples (first 3):`,
+    dateSamples,
+  ].join('\n')
+
+  debugSection.classList.remove('hidden')
+}
+
+debugClose.addEventListener('click', () => {
+  debugSection.classList.add('hidden')
+  _dumpActive = false
+})
+
+debugCopy.addEventListener('click', () => {
+  navigator.clipboard.writeText(debugOutput.textContent).then(() => {
+    const prev = debugCopy.textContent
+    debugCopy.textContent = 'Copied!'
+    setTimeout(() => { debugCopy.textContent = prev }, 1500)
+  })
+})
+
+// ── 't'/'a' key: dump transactions for hovered bar/line ──────────────────────
+const LINE_LABELS = ['Income line', 'Expenses line', 'Net line']
+
+document.addEventListener('keydown', e => {
+  // Don't intercept keys typed into form elements
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
+
+  const key = e.key.toLowerCase()
+
+  if (key === 't') {
+    if (!_hoveredMonth || !_hoveredLabel) return
+    const isLine = LINE_LABELS.includes(_hoveredLabel)
+    const matchingRows = _lastFiltered.filter(row => {
+      const month = row[_lastDateCol]?.slice(0, 7)
+      if (month !== _hoveredMonth) return false
+      return isLine || row[_lastStackCol] === _hoveredLabel
+    })
+    _showTransactionDump([{ title: `"${_hoveredLabel}" — ${_hoveredMonth}`, rows: matchingRows }])
+  }
+
+  if (key === 'a') {
+    if (!_hoveredMonth || _lastFiltered.length === 0) return
+
+    // All transactions for the hovered month, then one section per series
+    const monthRows = _lastFiltered.filter(row =>
+      row[_lastDateCol]?.slice(0, 7) === _hoveredMonth
+    )
+    const sections = [{ title: `All transactions — ${_hoveredMonth}`, rows: monthRows }]
+
+    for (const s of _lastChartData.series) {
+      const txRows = monthRows.filter(row => row[_lastStackCol] === s.label)
+      if (txRows.length > 0) {
+        sections.push({ title: `"${s.label}" — ${_hoveredMonth}`, rows: txRows })
+      }
+    }
+
+    _showTransactionDump(sections)
+  }
+})
+
+function _showTransactionDump(sections) {
+  _dumpActive = true
+  const SEP  = '  ' + '─'.repeat(72)
+  const colW = { date: 12, account: 22, category: 14, description: 26, amount: 10 }
+  const pad  = (s, w) => String(s ?? '').slice(0, w).padEnd(w)
+  const rpad = (s, w) => String(s ?? '').slice(0, w).padStart(w)
+
+  const hdr = '  ' + [
+    pad('date',        colW.date),
+    pad('account',     colW.account),
+    pad('category',    colW.category),
+    pad('description', colW.description),
+    rpad('amount',     colW.amount),
+  ].join('  ')
+
+  const renderSection = ({ title, rows: txRows }) => {
+    const dataLines = txRows.map(r => {
+      const amt    = parseFloat(r.amount) || 0
+      const amtStr = (amt >= 0 ? '+' : '') + amt.toFixed(2)
+      return '  ' + [
+        pad(r[_lastDateCol], colW.date),
+        pad(r.account,       colW.account),
+        pad(r.category,      colW.category),
+        pad(r.description,   colW.description),
+        rpad(amtStr,         colW.amount),
+      ].join('  ')
+    })
+    const total    = txRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+    const totalStr = (total >= 0 ? '+' : '') + total.toFixed(2)
+    return [
+      `── ${title} (${txRows.length} rows) ──`,
+      SEP, hdr, SEP,
+      ...dataLines,
+      SEP,
+      `  ${txRows.length} rows    Total: ${totalStr}`,
+    ].join('\n')
+  }
+
+  debugOutput.textContent = sections.map(renderSection).join('\n\n')
+  debugSection.classList.remove('hidden')
+}
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 init()

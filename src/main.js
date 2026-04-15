@@ -1,5 +1,5 @@
 import './style.css'
-import { parseCSV, detectDateColumn, generateSampleData } from './csv.js'
+import { parseCSV, detectDateColumn, detectStackColumn, generateSampleData } from './csv.js'
 import { aggregate } from './aggregate.js'
 import { applyFilters, getCCAccounts } from './filters.js'
 import { calcSummary } from './summary.js'
@@ -124,7 +124,7 @@ function _showColumns() {
 
 function _populateSelects(hdrs, savedDate, savedStack) {
   const dateDefault  = savedDate  ?? detectDateColumn(hdrs)
-  const stackDefault = savedStack ?? hdrs[0]
+  const stackDefault = savedStack ?? detectStackColumn(hdrs)
 
   dateColSel.innerHTML = hdrs.map(h =>
     `<option value="${h}"${h === dateDefault  ? ' selected' : ''}>${h}</option>`

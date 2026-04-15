@@ -2,30 +2,34 @@ import { describe, it, expect } from 'vitest'
 import { isCCRow, isCUCCPayment, getCCAccounts, applyFilters } from '../src/filters.js'
 
 const sampleRows = [
-  { statement_type: 'checking', account: 'Salary',     description: 'Monthly Salary',       amount: '3500' },
-  { statement_type: 'checking', account: 'CU Pay',     description: 'credit card payment',  amount: '-650' },
-  { statement_type: 'credit_card', account: 'visa_card',   description: 'Whole Foods',      amount: '-200' },
-  { statement_type: 'credit_card', account: 'visa_card',   description: 'Netflix',          amount: '-50'  },
-  { statement_type: 'credit_card', account: 'mastercard',  description: 'Electric Bill',    amount: '-120' },
+  { statement_type: 'transaction', account: 'Checking', description: 'Monthly Salary',      amount: '3500' },
+  { statement_type: 'transaction', account: 'Checking', description: 'credit card payment', amount: '-650' },
+  { statement_type: 'transaction', account: 'visa_card',   description: 'Whole Foods',      amount: '-200' },
+  { statement_type: 'transaction', account: 'visa_card',   description: 'Netflix',          amount: '-50'  },
+  { statement_type: 'transaction', account: 'mastercard',  description: 'Electric Bill',    amount: '-120' },
+  { statement_type: 'balance',     account: 'Checking',   description: 'End Balance',       amount: '10000' },
 ]
 
 describe('isCCRow', () => {
-  it('returns true for credit_card statement_type', () => {
+  it('returns true for account containing "card" (visa_card)', () => {
     expect(isCCRow(sampleRows[2])).toBe(true)
   })
-  it('returns false for checking', () => {
+  it('returns true for account "mastercard"', () => {
+    expect(isCCRow(sampleRows[4])).toBe(true)
+  })
+  it('returns false for checking account', () => {
     expect(isCCRow(sampleRows[0])).toBe(false)
   })
 })
 
 describe('isCUCCPayment', () => {
-  it('returns true when checking row description contains "credit card"', () => {
+  it('returns true when checking account description contains "credit card"', () => {
     expect(isCUCCPayment(sampleRows[1])).toBe(true)
   })
-  it('returns false for income row', () => {
+  it('returns false for income row in checking account', () => {
     expect(isCUCCPayment(sampleRows[0])).toBe(false)
   })
-  it('returns false for a CC row (not a CU row)', () => {
+  it('returns false for a CC row (not a CU account)', () => {
     expect(isCUCCPayment(sampleRows[2])).toBe(false)
   })
 })
@@ -38,17 +42,24 @@ describe('getCCAccounts', () => {
 })
 
 describe('applyFilters', () => {
+  it('filters out balance rows before any other processing', () => {
+    const result = applyFilters(sampleRows, { showAllCC: true, replaceCUPay: false, pickedCC: [] })
+    const balanceRow = result.find(r => r.statement_type === 'balance')
+    expect(balanceRow).toBeUndefined()
+  })
+
   it('showAllCC=true keeps all CC rows as-is', () => {
     const result = applyFilters(sampleRows, { showAllCC: true, replaceCUPay: false, pickedCC: [] })
-    const ccRows = result.filter(r => r.statement_type === 'credit_card')
+    const ccRows = result.filter(r => isCCRow(r))
     expect(ccRows.map(r => r.account).includes('visa_card')).toBe(true)
     expect(ccRows.map(r => r.account).includes('mastercard')).toBe(true)
   })
 
   it('showAllCC=false merges all CC rows under "Credit Cards" account', () => {
     const result = applyFilters(sampleRows, { showAllCC: false, replaceCUPay: false, pickedCC: [] })
-    const ccRows = result.filter(r => r.statement_type === 'credit_card')
-    expect(ccRows.every(r => r.account === 'Credit Cards')).toBe(true)
+    const ccRows = result.filter(r => r.account === 'Credit Cards')
+    expect(ccRows.length).toBeGreaterThan(0)
+    expect(result.find(r => r.account === 'visa_card')).toBeUndefined()
   })
 
   it('replaceCUPay=true removes CU credit card payment rows', () => {
@@ -67,7 +78,7 @@ describe('applyFilters', () => {
     const result = applyFilters(sampleRows, { showAllCC: true, replaceCUPay: false, pickedCC: ['visa_card'] })
     const mcRow = result.find(r => r.account === 'mastercard')
     const visaRow = result.find(r => r.account === 'visa_card')
-    const incomeRow = result.find(r => r.account === 'Salary')
+    const incomeRow = result.find(r => r.description === 'Monthly Salary')
     expect(mcRow).toBeUndefined()
     expect(visaRow).toBeDefined()
     expect(incomeRow).toBeDefined() // non-CC rows always pass through

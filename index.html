@@ -41,14 +41,25 @@
         <canvas id="chart-canvas"></canvas>
       </div>
       <div id="legend"></div>
+      <div id="month-range-wrap" class="hidden">
+        <div class="range-labels">
+          <span id="range-start-label"></span>
+          <span id="range-end-label"></span>
+        </div>
+        <div class="range-slider-wrap">
+          <div class="range-track"></div>
+          <div id="range-fill" class="range-fill"></div>
+          <input type="range" id="range-start" min="0" max="0" value="0" step="1">
+          <input type="range" id="range-end"   min="0" max="0" value="0" step="1">
+        </div>
+      </div>
     </div>
 
     <!-- Debug -->
     <div class="section hidden" id="debug-section">
       <div class="section-header">
-        <span style="font-size:12px;color:var(--muted)">Debug info</span>
-        <button id="debug-copy"  class="secondary-btn" style="margin-left:auto;font-size:11px">Copy</button>
-        <button id="debug-close" class="secondary-btn" style="font-size:11px">Hide</button>
+        <button id="debug-toggle" class="toggle-btn" style="font-size:12px">▼ Debug info</button>
+        <button id="debug-copy" class="secondary-btn" style="margin-left:auto;font-size:11px">Copy</button>
       </div>
       <pre id="debug-output" style="font-size:11px;color:var(--muted);white-space:pre-wrap;line-height:1.6"></pre>
     </div>

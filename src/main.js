@@ -26,8 +26,14 @@ const summaryExpenses = document.getElementById('summary-expenses')
 const summaryNet      = document.getElementById('summary-net')
 const debugSection    = document.getElementById('debug-section')
 const debugOutput     = document.getElementById('debug-output')
-const debugClose      = document.getElementById('debug-close')
+const debugToggle     = document.getElementById('debug-toggle')
 const debugCopy       = document.getElementById('debug-copy')
+const monthRangeWrap  = document.getElementById('month-range-wrap')
+const rangeStartEl    = document.getElementById('range-start')
+const rangeEndEl      = document.getElementById('range-end')
+const rangeFillEl     = document.getElementById('range-fill')
+const rangeStartLabel = document.getElementById('range-start-label')
+const rangeEndLabel   = document.getElementById('range-end-label')
 
 // ── App state ────────────────────────────────────────────────────────────────
 let rows = []
@@ -41,8 +47,15 @@ let _lastFiltered  = []
 let _lastDateCol   = null
 let _lastStackCol  = null
 let _lastChartData = { months: [], series: [] }
+let _lastFullMonths = []    // all months before range slice (for slider labels)
 let _dumpActive    = false  // true while a transaction dump is displayed; suppresses _showDebug overwrites
 let _lastWorkingRows = []   // filtered rows after sign inversion (matches what the chart shows)
+
+// Month range slider state
+let _rangeStart    = 0
+let _rangeEnd      = 0
+let _lastMonthsKey = null   // detects when underlying month list changes → resets range
+let _rangeTimer    = null
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 function init() {
@@ -72,6 +85,49 @@ function init() {
   }
 }
 
+// ── Month range slider ───────────────────────────────────────────────────────
+function _initRange(months) {
+  const max = Math.max(0, months.length - 1)
+  rangeStartEl.min = rangeEndEl.min = 0
+  rangeStartEl.max = rangeEndEl.max = max
+  _rangeStart = 0
+  _rangeEnd   = max
+  rangeStartEl.value = 0
+  rangeEndEl.value   = max
+  monthRangeWrap.classList.toggle('hidden', months.length === 0)
+  _updateRangeFill(months)
+}
+
+function _updateRangeFill(months) {
+  const max = Math.max(1, months.length - 1)
+  const s = _rangeStart, e = _rangeEnd
+  rangeFillEl.style.left  = (s / max * 100) + '%'
+  rangeFillEl.style.right = ((max - e) / max * 100) + '%'
+  rangeStartLabel.textContent = months[s] ?? ''
+  rangeEndLabel.textContent   = months[e] ?? ''
+  // When handles meet or start is at max, keep start thumb on top so it stays grabbable
+  rangeStartEl.style.zIndex = (s >= e) ? 3 : 2
+  rangeEndEl.style.zIndex   = (s >= e) ? 2 : 3
+}
+
+rangeStartEl.addEventListener('input', () => {
+  let s = parseInt(rangeStartEl.value)
+  if (s > _rangeEnd) { s = _rangeEnd; rangeStartEl.value = s }
+  _rangeStart = s
+  _updateRangeFill(_lastFullMonths)
+  clearTimeout(_rangeTimer)
+  _rangeTimer = setTimeout(_render, 80)
+})
+
+rangeEndEl.addEventListener('input', () => {
+  let e = parseInt(rangeEndEl.value)
+  if (e < _rangeStart) { e = _rangeStart; rangeEndEl.value = e }
+  _rangeEnd = e
+  _updateRangeFill(_lastFullMonths)
+  clearTimeout(_rangeTimer)
+  _rangeTimer = setTimeout(_render, 80)
+})
+
 // ── Rendering ────────────────────────────────────────────────────────────────
 function _render() {
   const dateCol  = dateColSel.value
@@ -90,17 +146,37 @@ function _render() {
     return { ...row, amount: String(-amt) }
   })
 
-  const chartData   = aggregate(workingRows, dateCol, stackCol)
+  const fullChartData = aggregate(workingRows, dateCol, stackCol)
+
+  // Reset range when the underlying months list changes (new data loaded)
+  const monthsKey = `${fullChartData.months[0]}..${fullChartData.months[fullChartData.months.length - 1]}:${fullChartData.months.length}`
+  if (monthsKey !== _lastMonthsKey) {
+    _lastMonthsKey = monthsKey
+    _initRange(fullChartData.months)
+  }
+  _lastFullMonths = fullChartData.months
+
+  // Slice to selected range
+  const rs = Math.min(_rangeStart, Math.max(0, fullChartData.months.length - 1))
+  const re = Math.min(_rangeEnd,   Math.max(0, fullChartData.months.length - 1))
+  const chartData = {
+    months: fullChartData.months.slice(rs, re + 1),
+    series: fullChartData.series.map(s => ({ ...s, data: s.data.slice(rs, re + 1) }))
+  }
+
   _lastFiltered    = filtered
   _lastWorkingRows = workingRows
   _lastDateCol     = dateCol
   _lastStackCol    = stackCol
   _lastChartData   = chartData
-  _showDebug(rows, filtered, dateCol, stackCol, chartData, { replaceCUPay })
+  _showDebug(rows, filtered, dateCol, stackCol, fullChartData, { replaceCUPay })
 
-  // Rows for lines/summary: exclude series hidden via legend checkboxes
+  // Rows for lines/summary: exclude hidden series AND restrict to selected month range
+  const rangedMonths = new Set(chartData.months)
   const hiddenSet  = new Set(settings.hiddenSeries ?? [])
-  const visibleRows = workingRows.filter(row => !hiddenSet.has(row[stackCol]))
+  const visibleRows = workingRows.filter(row =>
+    !hiddenSet.has(row[stackCol]) && rangedMonths.has(row[dateCol]?.slice(0, 7))
+  )
 
   const summary     = calcSummary(visibleRows, dateCol)
 
@@ -317,12 +393,13 @@ function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters
     dateSamples,
   ].join('\n')
 
-  debugSection.classList.remove('hidden')
+  debugSection.classList.remove('hidden')  // reveal container; leave output collapsed/expanded as-is
 }
 
-debugClose.addEventListener('click', () => {
-  debugSection.classList.add('hidden')
-  _dumpActive = false
+debugToggle.addEventListener('click', () => {
+  const collapsed = debugOutput.classList.toggle('hidden')
+  debugToggle.textContent = (collapsed ? '▶' : '▼') + ' Debug info'
+  if (collapsed) _dumpActive = false
 })
 
 debugCopy.addEventListener('click', () => {
@@ -425,6 +502,8 @@ function _showTransactionDump(sections) {
 
   debugOutput.textContent = sections.map(renderSection).join('\n\n')
   debugSection.classList.remove('hidden')
+  debugOutput.classList.remove('hidden')
+  debugToggle.textContent = '▼ Debug info'
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────

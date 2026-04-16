@@ -107,11 +107,16 @@ function _render() {
   _lastStackCol    = stackCol
   _lastChartData   = chartData
   _showDebug(rows, filtered, dateCol, stackCol, chartData, filters)
-  const summary     = calcSummary(workingRows, dateCol)
+
+  // Rows for lines/summary: exclude series hidden via legend checkboxes
+  const hiddenSet  = new Set(settings.hiddenSeries ?? [])
+  const visibleRows = workingRows.filter(row => !hiddenSet.has(row[stackCol]))
+
+  const summary     = calcSummary(visibleRows, dateCol)
 
   // Build per-month income/expenses/net arrays aligned to the chart's month labels
   const byMonth = {}
-  workingRows.forEach(row => {
+  visibleRows.forEach(row => {
     const month = row[dateCol]?.slice(0, 7)
     if (!month) return
     if (!byMonth[month]) byMonth[month] = { income: 0, expenses: 0 }
@@ -375,13 +380,17 @@ document.addEventListener('keydown', e => {
 
   const key = e.key.toLowerCase()
 
+  const hidden = new Set(settings.hiddenSeries ?? [])
+  const isVisible = row => !hidden.has(row[_lastStackCol])
+
   if (key === 't') {
     if (!_hoveredMonth || !_hoveredLabel) return
     const isLine = LINE_LABELS.includes(_hoveredLabel)
     const matchingRows = _lastWorkingRows.filter(row => {
       const month = row[_lastDateCol]?.slice(0, 7)
       if (month !== _hoveredMonth) return false
-      return isLine || row[_lastStackCol] === _hoveredLabel
+      if (isLine) return isVisible(row)           // line: all visible series for this month
+      return row[_lastStackCol] === _hoveredLabel // bar: just the hovered series
     })
     _showTransactionDump([{ title: `"${_hoveredLabel}" — ${_hoveredMonth}`, rows: matchingRows }])
   }
@@ -389,13 +398,14 @@ document.addEventListener('keydown', e => {
   if (key === 'a') {
     if (!_hoveredMonth || _lastWorkingRows.length === 0) return
 
-    // All transactions for the hovered month, then one section per series
+    // All transactions for the hovered month (enabled series only), then one section per visible series
     const monthRows = _lastWorkingRows.filter(row =>
-      row[_lastDateCol]?.slice(0, 7) === _hoveredMonth
+      row[_lastDateCol]?.slice(0, 7) === _hoveredMonth && isVisible(row)
     )
     const sections = [{ title: `All transactions — ${_hoveredMonth}`, rows: monthRows }]
 
     for (const s of _lastChartData.series) {
+      if (hidden.has(s.label)) continue
       const txRows = monthRows.filter(row => row[_lastStackCol] === s.label)
       if (txRows.length > 0) {
         sections.push({ title: `"${s.label}" — ${_hoveredMonth}`, rows: txRows })

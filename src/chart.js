@@ -1,4 +1,16 @@
 import Chart from 'chart.js/auto'
+import { Tooltip } from 'chart.js'
+
+// Tooltip positioner: float to the side of the cursor, never over the bar
+Tooltip.positioners.side = function(elements, eventPosition) {
+  if (!elements.length) return false
+  const { chartArea } = this.chart
+  const midX = (chartArea.left + chartArea.right) / 2
+  const { x, y } = eventPosition
+  return x <= midX
+    ? { x: x + 18, y, xAlign: 'left',  yAlign: 'center' }
+    : { x: x - 18, y, xAlign: 'right', yAlign: 'center' }
+}
 
 const COLORS = [
   '#4ecca3', '#e94560', '#54a0ff', '#ffd32a', '#ff9f43',
@@ -93,8 +105,11 @@ export function renderChart(
       plugins: {
         legend: { display: false },
         tooltip: {
+          position: 'side',
           mode: 'index',
           intersect: false,
+          // Exclude datasets that are currently hidden in the legend
+          filter: item => !chartInstance?.getDatasetMeta(item.datasetIndex).hidden,
           callbacks: {
             label: item => ` ${item.dataset.label}: $${item.parsed.y.toFixed(2)}`,
             footer: items => {

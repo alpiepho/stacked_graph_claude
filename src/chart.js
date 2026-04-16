@@ -40,6 +40,7 @@ let chartInstance = null
  * @param {function(string|null, string|null): void} [onElementHover] - called with (month, seriesLabel) on hover; null when leaving
  * @param {string[]} invertedAccounts - series labels whose amounts are currently inverted
  * @param {function(string): void} onInvertToggle - called with series label when ± is clicked
+ * @param {string[]} disabledSeries - series labels shown as grayed-out in legend (CC accounts when replace is off)
  */
 export function renderChart(
   canvas, legendContainer,
@@ -47,7 +48,8 @@ export function renderChart(
   hiddenSeries, onLegendToggle,
   lineData, linesVisible, onLineToggle,
   onElementHover,
-  invertedAccounts, onInvertToggle
+  invertedAccounts, onInvertToggle,
+  disabledSeries = []
 ) {
   if (chartInstance) {
     chartInstance.destroy()
@@ -144,7 +146,7 @@ export function renderChart(
     }
   })
 
-  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, invertedAccounts ?? [], onInvertToggle)
+  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, invertedAccounts ?? [], onInvertToggle, disabledSeries)
 }
 
 /**
@@ -155,8 +157,9 @@ export function renderChart(
  * @param {function(string, boolean): void} onLineToggle
  * @param {string[]} invertedAccounts
  * @param {function(string): void} onInvertToggle
+ * @param {string[]} disabledSeries - CC account names to show as grayed-out (not in chart)
  */
-function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, invertedAccounts, onInvertToggle) {
+function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, invertedAccounts, onInvertToggle, disabledSeries = []) {
   container.innerHTML = ''
 
   // Bar entries
@@ -192,6 +195,28 @@ function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLine
     })
 
     row.append(cb, swatch, label, invertBtn)
+    container.appendChild(row)
+  })
+
+  // Disabled CC series (shown grayed out when "Replace CU CC payments" is off)
+  disabledSeries.forEach(label => {
+    const row = document.createElement('div')
+    row.className = 'legend-row disabled'
+    row.title = 'Enable "Replace CU credit card payment with CC details" to show these accounts'
+
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = false
+    cb.disabled = true
+
+    const swatch = document.createElement('span')
+    swatch.className = 'legend-swatch'
+    swatch.style.background = 'var(--muted)'
+
+    const labelEl = document.createElement('span')
+    labelEl.textContent = label
+
+    row.append(cb, swatch, labelEl)
     container.appendChild(row)
   })
 

@@ -1,7 +1,7 @@
 import './style.css'
 import { parseCSV, detectDateColumn, detectStackColumn, generateSampleData } from './csv.js'
 import { aggregate } from './aggregate.js'
-import { applyFilters, getCCAccounts, isCCRow } from './filters.js'
+import { applyFilters, getCCAccounts, getCCStatementTypes } from './filters.js'
 import { calcSummary } from './summary.js'
 import { save, loadAll } from './storage.js'
 import { renderChart } from './chart.js'
@@ -18,9 +18,7 @@ const columnSection  = document.getElementById('column-section')
 const filterSection  = document.getElementById('filter-section')
 const chartSection   = document.getElementById('chart-section')
 const summarySection = document.getElementById('summary-section')
-const showAllCCCb  = document.getElementById('filter-show-all-cc')
 const replaceCUCb  = document.getElementById('filter-replace-cu')
-const pickCCDiv    = document.getElementById('filter-pick-cc')
 const chartCanvas  = document.getElementById('chart-canvas')
 const legendDiv    = document.getElementById('legend')
 const summaryIncome   = document.getElementById('summary-income')
@@ -56,7 +54,6 @@ function init() {
   }
 
   // Restore filter checkboxes
-  showAllCCCb.checked = settings.filters.showAllCC
   replaceCUCb.checked = settings.filters.replaceCUPay
 
   // If we have saved CSV, parse it and render
@@ -67,7 +64,6 @@ function init() {
       headers = parsed.headers
       _showColumns()
       _populateSelects(headers, settings.dateCol, settings.stackCol)
-      _updatePickCC()
       _render()
     } catch (_e) {
       // Saved CSV is invalid — clear it silently
@@ -81,16 +77,10 @@ function _render() {
   const dateCol  = dateColSel.value
   const stackCol = stackColSel.value
 
-  const pickedCC = [...pickCCDiv.querySelectorAll('input[type=checkbox]:checked')]
-    .map(el => el.value)
-
-  const filters = {
-    showAllCC:    showAllCCCb.checked,
-    replaceCUPay: replaceCUCb.checked,
-    pickedCC
-  }
-
-  const filtered    = applyFilters(rows, filters)
+  const replaceCUPay = replaceCUCb.checked
+  const filtered = applyFilters(rows, { replaceCUPay })
+  // When not replacing CU CC payments, CC rows are hidden; collect them for grayed legend
+  const disabledSeries = replaceCUPay ? [] : getCCAccounts(rows)
 
   // Apply per-series sign inversion (for CC accounts where debits are positive)
   const inverted = settings.invertedAccounts ?? []
@@ -106,7 +96,7 @@ function _render() {
   _lastDateCol     = dateCol
   _lastStackCol    = stackCol
   _lastChartData   = chartData
-  _showDebug(rows, filtered, dateCol, stackCol, chartData, filters)
+  _showDebug(rows, filtered, dateCol, stackCol, chartData, { replaceCUPay })
 
   // Rows for lines/summary: exclude series hidden via legend checkboxes
   const hiddenSet  = new Set(settings.hiddenSeries ?? [])
@@ -162,7 +152,8 @@ function _render() {
         : [...inv, label]
       save('inverted_accounts', settings.invertedAccounts)
       _render()
-    }
+    },
+    disabledSeries
   )
 
   _renderSummary(summary)
@@ -204,24 +195,6 @@ function _populateSelects(hdrs, savedDate, savedStack) {
   ).join('')
 }
 
-function _updatePickCC() {
-  const accounts = getCCAccounts(rows)
-  if (accounts.length === 0) {
-    pickCCDiv.classList.add('hidden')
-    return
-  }
-  pickCCDiv.classList.remove('hidden')
-  pickCCDiv.innerHTML = '<span style="color:var(--muted);font-size:12px">Pick CC accounts: </span>' +
-    accounts.map(acc => {
-      const checked = settings.filters.pickedCC.length === 0 || settings.filters.pickedCC.includes(acc)
-      return `<label><input type="checkbox" value="${acc}"${checked ? ' checked' : ''}> ${acc}</label>`
-    }).join('')
-
-  // Attach change listeners to the newly created checkboxes
-  pickCCDiv.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', _onFilterChange)
-  })
-}
 
 // ── Event handlers ───────────────────────────────────────────────────────────
 csvToggle.addEventListener('click', () => {
@@ -252,7 +225,6 @@ csvInput.addEventListener('input', () => {
       save('csv', text)
       _showColumns()
       _populateSelects(headers, null, null)
-      _updatePickCC()
       _render()
     } catch (e) {
       csvError.textContent = e.message
@@ -272,18 +244,11 @@ stackColSel.addEventListener('change', () => {
 })
 
 function _onFilterChange() {
-  const pickedCC = [...pickCCDiv.querySelectorAll('input[type=checkbox]:checked')]
-    .map(el => el.value)
-  settings.filters = {
-    showAllCC:    showAllCCCb.checked,
-    replaceCUPay: replaceCUCb.checked,
-    pickedCC
-  }
+  settings.filters = { replaceCUPay: replaceCUCb.checked }
   save('filters', settings.filters)
   _render()
 }
 
-showAllCCCb.addEventListener('change', _onFilterChange)
 replaceCUCb.addEventListener('change', _onFilterChange)
 
 // ── Debug ────────────────────────────────────────────────────────────────────
@@ -317,9 +282,8 @@ function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters
     .map(([v, n]) => `  "${v}" × ${n}`)
     .join('\n')
 
-  // CC detection: show which accounts isCCRow considers credit cards
-  const ccDetected = Object.keys(filteredAccountMap)
-    .filter(acc => isCCRow({ account: acc }))
+  // CC detection: statement_types identified as CC via 'transaction-*' entry_types
+  const ccDetected = [...getCCStatementTypes(allRows)]
 
   debugOutput.textContent = [
     `Total rows parsed:          ${allRows.length}`,
@@ -327,9 +291,7 @@ function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters
     ``,
     `── Active settings ──`,
     `  Stack by column: "${stackCol}"`,
-    `  Show all CC individually: ${filters.showAllCC}`,
-    `  Replace CU CC payments:   ${filters.replaceCUPay}`,
-    `  Picked CC accounts: [${filters.pickedCC.map(a => `"${a}"`).join(', ')}]`,
+    `  Replace CU CC payments with CC details: ${filters.replaceCUPay}`,
     ``,
     `── Chart series (${chartData.series.length} total → one checkbox each) ──`,
     chartData.series.length === 0
@@ -339,10 +301,10 @@ function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters
     `── Accounts in filtered rows (${Object.keys(filteredAccountMap).length} unique) ──`,
     filteredAccounts || '  (none)',
     ``,
-    `── CC detection (accounts matched as credit cards) ──`,
+    `── CC detection (statement_types from transaction-* entry_types) ──`,
     ccDetected.length === 0
-      ? '  (none — CC filter/merge has no effect)'
-      : ccDetected.map(a => `  "${a}"  ← treated as CC`).join('\n'),
+      ? '  (none — no transaction-* entry_types found)'
+      : ccDetected.map(t => `  "${t}"`).join('\n'),
     ``,
     `── Raw data ──`,
     `entry_type values (all rows):`,

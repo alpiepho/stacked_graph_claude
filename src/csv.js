@@ -68,9 +68,23 @@ export function generateSampleData() {
   const year = 2024
   const rnd = seededRandom(42)
   const vary = (base, pct) => (base * (1 + (rnd() - 0.5) * 2 * pct)).toFixed(2)
-  const row = (acct, day, cat, desc, amt, mm) => {
+  // Map account names to their statement_type prefix
+  const STMT_TYPE = {
+    'Checking':          'checking_statement',
+    'Savings':           'savings_statement',
+    'Business Checking': 'business_checking_statement',
+    'visa_card':         'visa_card',
+    'mastercard':        'mastercard',
+    'discover_card':     'discover_card',
+    'amex_card':         'amex_card',
+    'PayPal':            'paypal_statement',
+    'Venmo':             'venmo_statement',
+    'Investment':        'investment_statement',
+  }
+  const row = (acct, day, cat, desc, amt, mm, entryType = 'transaction') => {
     const dt = `${year}-${mm}-${String(day).padStart(2, '0')}`
-    return `transaction,${dt},${acct},transaction,${dt},${dt},${cat},${desc},${amt}`
+    const stmtType = STMT_TYPE[acct] ?? acct.toLowerCase().replace(/\s+/g, '_')
+    return `${stmtType},${dt},${acct},${entryType},${dt},${dt},${cat},${desc},${amt}`
   }
 
   for (let m = 1; m <= 12; m++) {
@@ -147,10 +161,10 @@ export function generateSampleData() {
     const mcTotal   = (parseFloat(mc_electric) + parseFloat(mc_groceries) + parseFloat(mc_clothing)).toFixed(2)
     const discTotal = (parseFloat(disc_gas) + parseFloat(disc_streaming) + parseFloat(disc_dining)).toFixed(2)
     const amexTotal = (parseFloat(amex_gym) + parseFloat(amex_dining) + (amex_travel ? parseFloat(amex_travel.replace('-','')) : 0)).toFixed(2)
-    rows.push(row('Checking', 15, 'CC Payment', 'credit card payment', `-${visaTotal}`, mm))
-    rows.push(row('Checking', 16, 'CC Payment', 'credit card payment', `-${mcTotal}`,   mm))
-    rows.push(row('Checking', 17, 'CC Payment', 'credit card payment', `-${discTotal}`, mm))
-    rows.push(row('Checking', 18, 'CC Payment', 'credit card payment', `-${amexTotal}`, mm))
+    rows.push(row('Checking', 15, 'CC Payment', 'Visa Card Payment',     `-${visaTotal}`, mm, 'transaction-visa_card'))
+    rows.push(row('Checking', 16, 'CC Payment', 'Mastercard Payment',    `-${mcTotal}`,   mm, 'transaction-mastercard'))
+    rows.push(row('Checking', 17, 'CC Payment', 'Discover Card Payment', `-${discTotal}`, mm, 'transaction-discover_card'))
+    rows.push(row('Checking', 18, 'CC Payment', 'Amex Card Payment',     `-${amexTotal}`, mm, 'transaction-amex_card'))
 
     // ── Balance rows — not graphed (entry_type=balance) ─────────────────────
     rows.push(`balance,${year}-${mm}-28,Checking,balance,${year}-${mm}-28,${year}-${mm}-28,Balance,End of Month Balance,${vary(8000, 0.15)}`)

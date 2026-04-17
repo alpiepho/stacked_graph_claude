@@ -526,11 +526,38 @@ document.addEventListener('keydown', e => {
       }
     }
 
-    _showTransactionDump(sections)
+    _showTransactionDump(sections, 'Accounts')
+  }
+
+  if (key === 'c') {
+    if (!_hoveredMonth || _lastWorkingRows.length === 0) return
+
+    // All transactions for the hovered month (enabled series only), then one section per category
+    const monthRows = _lastWorkingRows.filter(row =>
+      row[_lastDateCol]?.slice(0, 7) === _hoveredMonth && isVisible(row)
+    )
+    const sections = [{ title: `All transactions — ${_hoveredMonth}`, rows: monthRows }]
+
+    // Gather categories in order of first appearance
+    const catOrder = []
+    const catSeen  = new Set()
+    monthRows.forEach(row => {
+      const cat = row.category ?? ''
+      if (!catSeen.has(cat)) { catOrder.push(cat); catSeen.add(cat) }
+    })
+
+    for (const cat of catOrder) {
+      const txRows = monthRows.filter(row => (row.category ?? '') === cat)
+      if (txRows.length > 0) {
+        sections.push({ title: `"${cat || '(no category)'}" — ${_hoveredMonth}`, rows: txRows })
+      }
+    }
+
+    _showTransactionDump(sections, 'Categories')
   }
 })
 
-function _showTransactionDump(sections) {
+function _showTransactionDump(sections, summaryLabel = null) {
   _dumpActive = true
   const SEP  = '  ' + '─'.repeat(72)
   const colW = { date: 12, account: 22, category: 14, description: 26, amount: 10 }
@@ -575,7 +602,32 @@ function _showTransactionDump(sections) {
     ].join('\n')
   }
 
-  debugOutput.textContent = sections.map(renderSection).join('\n\n')
+  let output = sections.map(renderSection).join('\n\n')
+
+  // Condensed summary (skips the first "All transactions" section)
+  if (summaryLabel && sections.length > 1) {
+    const detailSections = sections.slice(1)
+    const labelW = 32, amtW = 12
+    const summaryLines = detailSections.map(({ title, rows: txRows }) => {
+      const net    = txRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+      const netStr = (net >= 0 ? '+' : '') + net.toFixed(2)
+      const label  = title.replace(/^"(.+)"\s*—.*$/, '$1')
+      return `  ${label.padEnd(labelW)}  ${netStr.padStart(amtW)}`
+    })
+    const grandNet    = detailSections.reduce((s, { rows: txRows }) =>
+      s + txRows.reduce((ss, r) => ss + (parseFloat(r.amount) || 0), 0), 0)
+    const grandStr    = (grandNet >= 0 ? '+' : '') + grandNet.toFixed(2)
+    const SSEP        = '  ' + '─'.repeat(labelW + amtW + 2)
+    output += '\n\n' + [
+      `── Summary: ${summaryLabel} ──`,
+      SSEP,
+      ...summaryLines,
+      SSEP,
+      `  ${'Total'.padEnd(labelW)}  ${grandStr.padStart(amtW)}`,
+    ].join('\n')
+  }
+
+  debugOutput.textContent = output
   debugSection.classList.remove('hidden')
   debugOutput.classList.remove('hidden')
   debugToggle.textContent = '▼ Debug info'

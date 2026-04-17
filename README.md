@@ -9,9 +9,13 @@ A progressive web app for visualizing personal financial CSV data as an interact
 - **Paste CSV data** directly into the app — no file upload, no server
 - **Interactive stacked bar chart** with hover tooltips and per-series opacity dimming
 - **Flexible column mapping** — pick which column is the date axis and which drives the stacked series
-- **CC/CU filters** — combine or split credit card accounts, replace credit union CC payments with the underlying card transactions
-- **Income / Expenses / Net** summary panel with monthly averages and annual totals
-- **Persistent settings** — all column choices, filters, and hidden series are saved to localStorage and restored on reload
+- **CC/CU filters** — replace credit union CC payment rows with the underlying card transactions; optionally filter out CC credit (payment received) entries that would skew calculations
+- **Stable bar colors** — each series keeps its color regardless of filter state
+- **Month range slider** — double-ended slider to zoom into a date window; summary and lines update to match
+- **Income / Expenses / Net overlay lines** — toggle each line independently from the legend
+- **Income / Expenses / Net summary panel** with monthly averages and annual totals
+- **Keyboard shortcuts** — inspect transactions while hovering a bar (see below)
+- **Persistent settings** — column choices, filters, hidden series, and collapsed state are saved to localStorage and restored on reload
 - **Works offline** — installable PWA, all assets precached after first load
 - **Generates sample data** — try the app immediately without your own CSV
 
@@ -23,11 +27,38 @@ The app expects a CSV with these headers:
 statement_type,statement_date,account,entry_type,transaction_date,effective_date,category,description,amount
 ```
 
-- **`amount`** — positive values are income, negative values are expenses
+- **`amount`** — positive values are income/credits, negative values are expenses/debits
 - **`transaction_date`** — format `YYYY-MM-DD`, used for monthly binning by default
+- **`entry_type`** — `transaction` for regular rows; `payment-<card>` (e.g. `payment-visa_card`) for credit union CC payment rows; `balance` rows are ignored
+- **`statement_type`** — identifies the account type; CC statement types are derived automatically from `payment-*` entry_type suffixes
 - Other columns can be used as the stack-by axis (e.g. `account`, `category`)
 
-The CC/CU filter logic looks for `statement_type = credit_card` to identify credit card rows and scans `description` for keywords like `"credit card payment"` to identify CU payment rows. Update the constants in `src/filters.js` if your data uses different values.
+### CC/CU Payment Detection
+
+CC accounts are identified by scanning `entry_type` values for the `payment-<suffix>` pattern — the suffix is the CC account's `statement_type`. This approach works for any account name, including URLs like `www.chase.com/amazon`.
+
+A `payment-visa_card` entry_type means:
+- The row is a credit union outgoing payment to the visa card
+- `visa_card` is the statement_type of the credit card account
+
+## Filters
+
+| Filter | Description |
+|--------|-------------|
+| **Replace CU credit card payment with CC details** | Hides the CU-side lump-sum CC payment rows and shows individual card transactions instead |
+| **Filter CC credits** | Removes positive (credit/payment received) transactions from CC accounts — useful when CC detail is enabled and payment-received credits would inflate income totals |
+
+## Keyboard Shortcuts
+
+These shortcuts work when hovering over a bar in the chart. Results appear in the collapsible debug panel.
+
+| Key | Action |
+|-----|--------|
+| `t` | Show all transactions for the **hovered series and month** |
+| `a` | Show all transactions for the **hovered month**, broken out by account with a net summary |
+| `c` | Show all transactions for the **hovered month**, broken out by category with a net summary |
+
+The `a` and `c` dumps each end with a condensed **Summary** table listing the net value per account or category and a grand total.
 
 ## Development
 
@@ -64,7 +95,7 @@ This project was designed and implemented entirely through [Claude Code](https:/
 
 4. **Subagent-driven development** — Each of the 13 tasks was handed to a fresh Claude subagent with only the context it needed. After each task, two separate reviewer subagents checked spec compliance and code quality before the next task began.
 
-The entire process — from blank directory to working PWA with 40 passing tests and a GitHub Actions deploy pipeline — was completed in a single Claude Code session.
+The entire process — from blank directory to working PWA with 40 passing tests and a GitHub Actions deploy pipeline — was completed in a single Claude Code session. Ongoing feature development continues through conversational iteration with Claude Code.
 
 ## Tech Stack
 

@@ -42,7 +42,7 @@ export function loadAll() {
     csv:          load('csv', ''),
     dateCol:      load('date_col', null),
     stackCol:     load('stack_col', null),
-    filters:      load('filters', { replaceCUPay: false }),
+    filters:      load('filters', { replaceCUPay: false, filterCCCredits: false }),
     hiddenSeries: load('hidden_series', []),
     csvCollapsed:     load('csv_collapsed', true),
     linesVisible:     load('lines_visible', { income: true, expenses: true, net: true })

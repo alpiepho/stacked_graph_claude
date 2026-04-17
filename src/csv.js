@@ -167,6 +167,12 @@ export function generateSampleData() {
     rows.push(row('Checking', 17, 'CC Payment', 'Discover Card Payment', `-${discTotal}`, year, mm, 'payment-discover_card'))
     rows.push(row('Checking', 18, 'CC Payment', 'Amex Card Payment',     `-${amexTotal}`, year, mm, 'payment-amex_card'))
 
+    // ── CC-side payment received entries (credit on the CC statement) ──────────
+    rows.push(row('visa_card',     20, 'Payment', 'Payment Received', visaTotal,  year, mm))
+    rows.push(row('mastercard',    21, 'Payment', 'Payment Received', mcTotal,    year, mm))
+    rows.push(row('discover_card', 22, 'Payment', 'Payment Received', discTotal,  year, mm))
+    rows.push(row('amex_card',     23, 'Payment', 'Payment Received', amexTotal,  year, mm))
+
     // ── Balance rows — not graphed (entry_type=balance) ─────────────────────
     rows.push(`balance,${year}-${mm}-28,Checking,balance,${year}-${mm}-28,${year}-${mm}-28,Balance,End of Month Balance,${vary(8000, 0.15)}`)
   }

@@ -18,7 +18,8 @@ const columnSection  = document.getElementById('column-section')
 const filterSection  = document.getElementById('filter-section')
 const chartSection   = document.getElementById('chart-section')
 const summarySection = document.getElementById('summary-section')
-const replaceCUCb  = document.getElementById('filter-replace-cu')
+const replaceCUCb    = document.getElementById('filter-replace-cu')
+const filterCCCreditsCb = document.getElementById('filter-cc-credits')
 const chartCanvas  = document.getElementById('chart-canvas')
 const legendDiv    = document.getElementById('legend')
 const summaryIncome   = document.getElementById('summary-income')
@@ -68,6 +69,7 @@ function init() {
 
   // Restore filter checkboxes
   replaceCUCb.checked = settings.filters.replaceCUPay
+  filterCCCreditsCb.checked = settings.filters.filterCCCredits ?? false
 
   // If we have saved CSV, parse it and render
   if (settings.csv) {
@@ -214,8 +216,9 @@ function _render() {
   const dateCol  = dateColSel.value
   const stackCol = stackColSel.value
 
-  const replaceCUPay = replaceCUCb.checked
-  const filtered = applyFilters(rows, { replaceCUPay })
+  const replaceCUPay    = replaceCUCb.checked
+  const filterCCCredits = filterCCCreditsCb.checked
+  const filtered = applyFilters(rows, { replaceCUPay, filterCCCredits })
   const disabledAccounts = replaceCUPay ? [] : getCCAccounts(rows)
 
   const workingRows = filtered
@@ -390,12 +393,13 @@ stackColSel.addEventListener('change', () => {
 })
 
 function _onFilterChange() {
-  settings.filters = { replaceCUPay: replaceCUCb.checked }
+  settings.filters = { replaceCUPay: replaceCUCb.checked, filterCCCredits: filterCCCreditsCb.checked }
   save('filters', settings.filters)
   _render()
 }
 
 replaceCUCb.addEventListener('change', _onFilterChange)
+filterCCCreditsCb.addEventListener('change', _onFilterChange)
 
 // ── Debug ────────────────────────────────────────────────────────────────────
 function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters) {
@@ -438,6 +442,7 @@ function _showDebug(allRows, filteredRows, dateCol, stackCol, chartData, filters
     `── Active settings ──`,
     `  Stack by column: "${stackCol}"`,
     `  Replace CU CC payments with CC details: ${filters.replaceCUPay}`,
+    `  Filter CC credits: ${filters.filterCCCredits}`,
     ``,
     `── Chart series (${chartData.series.length} total → one checkbox each) ──`,
     chartData.series.length === 0

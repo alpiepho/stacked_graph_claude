@@ -65,10 +65,10 @@ export function getCCAccounts(rows) {
 /**
  * Apply user-selected filters to the full row set.
  * @param {Object[]} rows
- * @param {{ replaceCUPay: boolean }} filters
+ * @param {{ replaceCUPay: boolean, filterCCCredits: boolean }} filters
  * @returns {Object[]}
  */
-export function applyFilters(rows, { replaceCUPay }) {
+export function applyFilters(rows, { replaceCUPay, filterCCCredits }) {
   const ccTypes = getCCStatementTypes(rows)
 
   // Only graph transaction and payment entries; skip balance/other entries
@@ -84,6 +84,14 @@ export function applyFilters(rows, { replaceCUPay }) {
   } else {
     // Hide CC detail rows: CU payment rows represent the total CC spend
     filtered = filtered.filter(r => !isCCRow(r, ccTypes))
+  }
+
+  if (filterCCCredits) {
+    // Remove positive transactions from CC accounts (e.g. payment received credits)
+    filtered = filtered.filter(r => {
+      if (!isCCRow(r, ccTypes)) return true
+      return parseFloat(r.amount) < 0
+    })
   }
 
   return filtered

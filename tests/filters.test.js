@@ -3,8 +3,8 @@ import { isCCRow, isCUCCPayment, getCCAccounts, applyFilters, getCUCCPaymentTarg
 
 const sampleRows = [
   { statement_type: 'checking_statement', entry_type: 'transaction',            account: 'Checking',    description: 'Monthly Salary',      amount: '3500' },
-  { statement_type: 'checking_statement', entry_type: 'transaction-visa_card',  account: 'Checking',    description: 'Visa Card Payment',   amount: '-650' },
-  { statement_type: 'checking_statement', entry_type: 'transaction-mastercard', account: 'Checking',    description: 'Mastercard Payment',  amount: '-300' },
+  { statement_type: 'checking_statement', entry_type: 'payment-visa_card',  account: 'Checking',    description: 'Visa Card Payment',   amount: '-650' },
+  { statement_type: 'checking_statement', entry_type: 'payment-mastercard', account: 'Checking',    description: 'Mastercard Payment',  amount: '-300' },
   { statement_type: 'checking_statement', entry_type: 'transaction',            account: 'Checking',    description: 'credit card payment', amount: '-100' },
   { statement_type: 'visa_card',          entry_type: 'transaction',            account: 'visa_card',   description: 'Whole Foods',         amount: '-200' },
   { statement_type: 'visa_card',          entry_type: 'transaction',            account: 'visa_card',   description: 'Netflix',             amount: '-50'  },
@@ -16,10 +16,10 @@ const sampleRows = [
 const ccTypes = getCCStatementTypes(sampleRows)
 
 describe('getCCStatementTypes', () => {
-  it('derives CC statement_types from transaction-* entry_types', () => {
+  it('derives CC statement_types from payment-* entry_types', () => {
     expect([...ccTypes].sort()).toEqual(['mastercard', 'visa_card'])
   })
-  it('returns empty set when no transaction-* entry_types present', () => {
+  it('returns empty set when no payment-* entry_types present', () => {
     const types = getCCStatementTypes([sampleRows[0]])
     expect(types.size).toBe(0)
   })
@@ -42,7 +42,7 @@ describe('isCCRow', () => {
 })
 
 describe('isCUCCPayment', () => {
-  it('returns true when entry_type starts with "transaction-"', () => {
+  it('returns true when entry_type starts with "payment-"', () => {
     expect(isCUCCPayment(sampleRows[1])).toBe(true)
   })
   it('returns true for description-keyword fallback on a CU account', () => {
@@ -57,7 +57,7 @@ describe('isCUCCPayment', () => {
 })
 
 describe('getCUCCPaymentTarget', () => {
-  it('returns the card statement_type from entry_type suffix', () => {
+  it('returns the card statement_type from payment-* entry_type suffix', () => {
     expect(getCUCCPaymentTarget(sampleRows[1])).toBe('visa_card')
   })
   it('returns null for a plain transaction', () => {
@@ -89,7 +89,7 @@ describe('applyFilters', () => {
 
   it('replaceCUPay=false keeps CU-side payment rows (they represent total CC spend)', () => {
     const result = applyFilters(sampleRows, { replaceCUPay: false })
-    expect(result.find(r => r.entry_type === 'transaction-visa_card')).toBeDefined()
+    expect(result.find(r => r.entry_type === 'payment-visa_card')).toBeDefined()
     expect(result.find(r => r.description === 'credit card payment')).toBeDefined()
   })
 
@@ -101,8 +101,8 @@ describe('applyFilters', () => {
 
   it('replaceCUPay=true removes CU credit card payment rows', () => {
     const result = applyFilters(sampleRows, { replaceCUPay: true })
-    expect(result.find(r => r.entry_type === 'transaction-visa_card')).toBeUndefined()
-    expect(result.find(r => r.entry_type === 'transaction-mastercard')).toBeUndefined()
+    expect(result.find(r => r.entry_type === 'payment-visa_card')).toBeUndefined()
+    expect(result.find(r => r.entry_type === 'payment-mastercard')).toBeUndefined()
     expect(result.find(r => r.description === 'credit card payment')).toBeUndefined()
   })
 

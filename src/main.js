@@ -138,13 +138,7 @@ function _render() {
   // When not replacing CU CC payments, CC rows are hidden; collect them for grayed legend
   const disabledSeries = replaceCUPay ? [] : getCCAccounts(rows)
 
-  // Apply per-series sign inversion (for CC accounts where debits are positive)
-  const inverted = settings.invertedAccounts ?? []
-  const workingRows = inverted.length === 0 ? filtered : filtered.map(row => {
-    if (!inverted.includes(row[stackCol])) return row
-    const amt = parseFloat(row.amount) || 0
-    return { ...row, amount: String(-amt) }
-  })
+  const workingRows = filtered
 
   const fullChartData = aggregate(workingRows, dateCol, stackCol)
 
@@ -219,15 +213,6 @@ function _render() {
     (month, label) => {
       _hoveredMonth = month
       _hoveredLabel = label
-    },
-    settings.invertedAccounts ?? [],
-    (label) => {
-      const inv = settings.invertedAccounts ?? []
-      settings.invertedAccounts = inv.includes(label)
-        ? inv.filter(l => l !== label)
-        : [...inv, label]
-      save('inverted_accounts', settings.invertedAccounts)
-      _render()
     },
     disabledSeries
   )

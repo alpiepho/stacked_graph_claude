@@ -5,7 +5,7 @@ const CU_CC_PAYMENT_KEYWORDS = ['credit card', 'card payment', 'cc payment']
 
 /**
  * Derive which statement_type values correspond to CC accounts by scanning for
- * entry_type values like 'transaction-chase_am' — the suffix is the CC statement_type.
+ * entry_type values like 'payment-chase_am' — the suffix is the CC statement_type.
  * @param {Object[]} rows
  * @returns {Set<string>}
  */
@@ -13,7 +13,7 @@ export function getCCStatementTypes(rows) {
   const types = new Set()
   rows.forEach(r => {
     const et = (r.entry_type ?? '').toLowerCase()
-    if (et.startsWith('transaction-')) types.add(et.slice('transaction-'.length))
+    if (et.startsWith('payment-')) types.add(et.slice('payment-'.length))
   })
   return types
 }
@@ -30,9 +30,9 @@ export function isCCRow(row, ccStatementTypes) {
 
 /** @param {Object} row */
 export function isCUCCPayment(row) {
-  // Primary: entry_type like 'transaction-chase_am' unambiguously signals a CU-side CC payment
+  // Primary: entry_type like 'payment-chase_am' unambiguously signals a CU-side CC payment
   const entryType = (row.entry_type ?? '').toLowerCase()
-  if (entryType.startsWith('transaction-')) return true
+  if (entryType.startsWith('payment-')) return true
   // Fallback: CU account with description keyword match
   const account = (row.account ?? '').toLowerCase()
   if (!CU_ACCOUNT_KEYWORDS.some(kw => account.includes(kw))) return false
@@ -42,13 +42,13 @@ export function isCUCCPayment(row) {
 
 /**
  * Extract the target CC account statement_type from a CU CC payment row.
- * Returns the suffix after 'transaction-', or null if not encoded in entry_type.
+ * Returns the suffix after 'payment-', or null if not encoded in entry_type.
  * @param {Object} row
  * @returns {string|null}
  */
 export function getCUCCPaymentTarget(row) {
   const entryType = (row.entry_type ?? '').toLowerCase()
-  if (entryType.startsWith('transaction-')) return entryType.slice('transaction-'.length)
+  if (entryType.startsWith('payment-')) return entryType.slice('payment-'.length)
   return null
 }
 
@@ -71,9 +71,12 @@ export function getCCAccounts(rows) {
 export function applyFilters(rows, { replaceCUPay }) {
   const ccTypes = getCCStatementTypes(rows)
 
-  // Only graph transaction entries; skip balance/other entries
-  // Accepts 'transaction' and 'transaction-*' (e.g. 'transaction-chase_am')
-  let filtered = rows.filter(r => r.entry_type?.toLowerCase().startsWith('transaction'))
+  // Only graph transaction and payment entries; skip balance/other entries
+  // Accepts 'transaction' (regular) and 'payment-*' (e.g. 'payment-chase_am' CU CC payments)
+  let filtered = rows.filter(r => {
+    const et = (r.entry_type ?? '').toLowerCase()
+    return et === 'transaction' || et.startsWith('payment-')
+  })
 
   if (replaceCUPay) {
     // Show CC details: remove CU-side CC payment rows (they'd double-count)

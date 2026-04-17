@@ -45,7 +45,6 @@ export function loadAll() {
     filters:      load('filters', { replaceCUPay: false }),
     hiddenSeries: load('hidden_series', []),
     csvCollapsed:     load('csv_collapsed', true),
-    linesVisible:     load('lines_visible', { income: true, expenses: true, net: true }),
-    invertedAccounts: load('inverted_accounts', [])
+    linesVisible:     load('lines_visible', { income: true, expenses: true, net: true })
   }
 }

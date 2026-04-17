@@ -17,6 +17,18 @@ const COLORS = [
   '#ee5a24', '#0652DD', '#9980FA', '#833471', '#1289A7'
 ]
 
+// Stable label→color map: each series label gets a color on first appearance and keeps it.
+const _labelColorMap = new Map()
+let _nextColorIdx = 0
+
+function getColor(label) {
+  if (!_labelColorMap.has(label)) {
+    _labelColorMap.set(label, COLORS[_nextColorIdx % COLORS.length])
+    _nextColorIdx++
+  }
+  return _labelColorMap.get(label)
+}
+
 const LINE_META = [
   { key: 'income',   label: 'Income line',   color: '#2ecc71' },
   { key: 'expenses', label: 'Expenses line',  color: '#ff6b6b' },
@@ -38,8 +50,6 @@ let chartInstance = null
  * @param {{ income: boolean, expenses: boolean, net: boolean }} linesVisible
  * @param {function(string, boolean): void} onLineToggle - called with (key, isVisible)
  * @param {function(string|null, string|null): void} [onElementHover] - called with (month, seriesLabel) on hover; null when leaving
- * @param {string[]} invertedAccounts - series labels whose amounts are currently inverted
- * @param {function(string): void} onInvertToggle - called with series label when ± is clicked
  * @param {string[]} disabledSeries - series labels shown as grayed-out in legend (CC accounts when replace is off)
  */
 export function renderChart(
@@ -48,7 +58,6 @@ export function renderChart(
   hiddenSeries, onLegendToggle,
   lineData, linesVisible, onLineToggle,
   onElementHover,
-  invertedAccounts, onInvertToggle,
   disabledSeries = []
 ) {
   if (chartInstance) {
@@ -64,11 +73,11 @@ export function renderChart(
   canvas.height = 400
 
   // Bar datasets
-  const barDatasets = series.map((s, i) => ({
+  const barDatasets = series.map((s) => ({
     type: 'bar',
     label: s.label,
     data: s.data,
-    backgroundColor: COLORS[i % COLORS.length],
+    backgroundColor: getColor(s.label),
     stack: 'main',
     hidden: hiddenSeries.includes(s.label)
   }))
@@ -113,6 +122,13 @@ export function renderChart(
           // Exclude datasets that are currently hidden in the legend
           filter: item => !chartInstance?.getDatasetMeta(item.datasetIndex).hidden,
           callbacks: {
+            // Always use the stable full color, not the dimmed hover color
+            labelColor: item => {
+              const color = item.dataset.type === 'bar'
+                ? getColor(item.dataset.label)
+                : item.dataset.borderColor
+              return { borderColor: color, backgroundColor: color }
+            },
             label: item => ` ${item.dataset.label}: $${item.parsed.y.toFixed(2)}`,
             footer: items => {
               const barItems = items.filter(i => i.dataset.type === 'bar')
@@ -126,8 +142,8 @@ export function renderChart(
       onHover: (_event, activeElements) => {
         if (!chartInstance) return
         if (activeElements.length === 0) {
-          chartInstance.data.datasets.forEach((ds, i) => {
-            if (ds.type === 'bar') ds.backgroundColor = COLORS[i % COLORS.length]
+          chartInstance.data.datasets.forEach((ds) => {
+            if (ds.type === 'bar') ds.backgroundColor = getColor(ds.label)
           })
           onElementHover?.(null, null)
         } else {
@@ -136,8 +152,8 @@ export function renderChart(
           chartInstance.data.datasets.forEach((ds, i) => {
             if (ds.type !== 'bar') return
             ds.backgroundColor = i === hoveredIdx
-              ? COLORS[i % COLORS.length]
-              : COLORS[i % COLORS.length] + '33'
+              ? getColor(ds.label)
+              : getColor(ds.label) + '33'
           })
           onElementHover?.(months[el.index], datasets[hoveredIdx]?.label ?? null)
         }
@@ -146,7 +162,7 @@ export function renderChart(
     }
   })
 
-  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, invertedAccounts ?? [], onInvertToggle, disabledSeries)
+  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, disabledSeries)
 }
 
 /**
@@ -155,11 +171,9 @@ export function renderChart(
  * @param {Object[]} lineDatasets
  * @param {function(string, boolean): void} onBarToggle
  * @param {function(string, boolean): void} onLineToggle
- * @param {string[]} invertedAccounts
- * @param {function(string): void} onInvertToggle
  * @param {string[]} disabledSeries - CC account names to show as grayed-out (not in chart)
  */
-function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, invertedAccounts, onInvertToggle, disabledSeries = []) {
+function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, disabledSeries = []) {
   container.innerHTML = ''
 
   // Bar entries
@@ -180,21 +194,12 @@ function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLine
 
     const swatch = document.createElement('span')
     swatch.className = 'legend-swatch'
-    swatch.style.background = COLORS[i % COLORS.length]
+    swatch.style.background = getColor(ds.label)
 
     const label = document.createElement('span')
     label.textContent = ds.label
 
-    const invertBtn = document.createElement('button')
-    invertBtn.className = 'legend-invert-btn' + (invertedAccounts.includes(ds.label) ? ' active' : '')
-    invertBtn.textContent = '±'
-    invertBtn.title = 'Invert sign for this account (use for CC accounts where debits are positive)'
-    invertBtn.addEventListener('click', e => {
-      e.stopPropagation()
-      onInvertToggle?.(ds.label)
-    })
-
-    row.append(cb, swatch, label, invertBtn)
+    row.append(cb, swatch, label)
     container.appendChild(row)
   })
 

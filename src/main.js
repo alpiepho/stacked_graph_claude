@@ -128,6 +128,87 @@ rangeEndEl.addEventListener('input', () => {
   _rangeTimer = setTimeout(_render, 80)
 })
 
+// ── Payment-based series ordering ────────────────────────────────────────────
+/**
+ * Scan rows to build: payer account → [CC accounts], and CC accounts in payment row order.
+ */
+function _buildPaymentOrder(allRows, stackCol) {
+  const stmtToAcct = new Map()
+  allRows.forEach(r => {
+    const st = (r.statement_type ?? '').toLowerCase()
+    if (st && r[stackCol]) stmtToAcct.set(st, r[stackCol])
+  })
+
+  const payerCCs = new Map() // payer account → ordered CC account names
+  const ccOrder  = []        // all CC accounts in first-seen order across payment rows
+  const seen     = new Set()
+
+  allRows.forEach(r => {
+    const et = (r.entry_type ?? '').toLowerCase()
+    if (!et.startsWith('payment-')) return
+    const ccAcct = stmtToAcct.get(et.slice('payment-'.length))
+    const payer  = r[stackCol]
+    if (!ccAcct || !payer) return
+    if (!payerCCs.has(payer)) payerCCs.set(payer, [])
+    const list = payerCCs.get(payer)
+    if (!list.includes(ccAcct)) list.push(ccAcct)
+    if (!seen.has(ccAcct)) { ccOrder.push(ccAcct); seen.add(ccAcct) }
+  })
+
+  return { payerCCs, ccOrder }
+}
+
+/** Reorder chart series so CC accounts appear just below their payer in the stack. */
+function _reorderSeries(series, allRows, stackCol) {
+  const { payerCCs } = _buildPaymentOrder(allRows, stackCol)
+  const handledCCs   = new Set([...payerCCs.values()].flat())
+  const byLabel      = new Map(series.map(s => [s.label, s]))
+  const result = [], placed = new Set()
+
+  for (const s of series) {
+    if (placed.has(s.label) || handledCCs.has(s.label)) continue
+    // Insert this payer's CC accounts just before it in the stack
+    for (const cc of (payerCCs.get(s.label) ?? [])) {
+      const ccS = byLabel.get(cc)
+      if (ccS && !placed.has(cc)) { result.push(ccS); placed.add(cc) }
+    }
+    result.push(s); placed.add(s.label)
+  }
+  // Any remaining (CC without known payer in current series)
+  for (const s of series) if (!placed.has(s.label)) result.push(s)
+  return result
+}
+
+/**
+ * Build a combined ordered legend list interleaving active series and disabled CC entries.
+ * Each disabled CC account appears just before its payer in the list.
+ * @returns {Array<{label: string, disabled: boolean}>}
+ */
+function _buildCombinedLegendOrder(activeSeries, disabledAccounts, allRows, stackCol) {
+  if (disabledAccounts.length === 0) {
+    return activeSeries.map(s => ({ label: s.label, disabled: false }))
+  }
+  const { payerCCs } = _buildPaymentOrder(allRows, stackCol)
+  const disabledSet = new Set(disabledAccounts)
+  const result = [], placed = new Set()
+
+  for (const s of activeSeries) {
+    for (const cc of (payerCCs.get(s.label) ?? [])) {
+      if (disabledSet.has(cc) && !placed.has(cc)) {
+        result.push({ label: cc, disabled: true })
+        placed.add(cc)
+      }
+    }
+    result.push({ label: s.label, disabled: false })
+    placed.add(s.label)
+  }
+  // Any disabled accounts whose payer isn't in the active series
+  for (const a of disabledAccounts) {
+    if (!placed.has(a)) result.push({ label: a, disabled: true })
+  }
+  return result
+}
+
 // ── Rendering ────────────────────────────────────────────────────────────────
 function _render() {
   const dateCol  = dateColSel.value
@@ -135,12 +216,16 @@ function _render() {
 
   const replaceCUPay = replaceCUCb.checked
   const filtered = applyFilters(rows, { replaceCUPay })
-  // When not replacing CU CC payments, CC rows are hidden; collect them for grayed legend
-  const disabledSeries = replaceCUPay ? [] : getCCAccounts(rows)
+  const disabledAccounts = replaceCUPay ? [] : getCCAccounts(rows)
 
   const workingRows = filtered
 
   const fullChartData = aggregate(workingRows, dateCol, stackCol)
+  // Reorder series so CC accounts stack just below the account that pays them
+  fullChartData.series = _reorderSeries(fullChartData.series, rows, stackCol)
+
+  // Build combined legend order: active + disabled CC entries interleaved at correct positions
+  const legendOrder = _buildCombinedLegendOrder(fullChartData.series, disabledAccounts, rows, stackCol)
 
   // Reset range when the underlying months list changes (new data loaded)
   const monthsKey = `${fullChartData.months[0]}..${fullChartData.months[fullChartData.months.length - 1]}:${fullChartData.months.length}`
@@ -214,7 +299,7 @@ function _render() {
       _hoveredMonth = month
       _hoveredLabel = label
     },
-    disabledSeries
+    legendOrder
   )
 
   _renderSummary(summary)

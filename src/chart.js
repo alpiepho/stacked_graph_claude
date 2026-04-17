@@ -50,7 +50,7 @@ let chartInstance = null
  * @param {{ income: boolean, expenses: boolean, net: boolean }} linesVisible
  * @param {function(string, boolean): void} onLineToggle - called with (key, isVisible)
  * @param {function(string|null, string|null): void} [onElementHover] - called with (month, seriesLabel) on hover; null when leaving
- * @param {string[]} disabledSeries - series labels shown as grayed-out in legend (CC accounts when replace is off)
+ * @param {Array<{label:string, disabled:boolean}>} legendOrder - full ordered legend entries (active + grayed-out interleaved)
  */
 export function renderChart(
   canvas, legendContainer,
@@ -58,7 +58,7 @@ export function renderChart(
   hiddenSeries, onLegendToggle,
   lineData, linesVisible, onLineToggle,
   onElementHover,
-  disabledSeries = []
+  legendOrder = []
 ) {
   if (chartInstance) {
     chartInstance.destroy()
@@ -101,7 +101,10 @@ export function renderChart(
     stack: `_line_${key}`, // unique group — prevents stacking with bars or other lines
   }))
 
-  const datasets = [...barDatasets, ...lineDatasets]
+  // Reverse bar datasets so the first entry in legendOrder appears on top of the stack.
+  // barDatasets keeps original order for label→index mapping in the legend.
+  const barDatasetsReversed = [...barDatasets].reverse()
+  const datasets = [...barDatasetsReversed, ...lineDatasets]
 
   chartInstance = new Chart(canvas, {
     type: 'bar',
@@ -162,7 +165,7 @@ export function renderChart(
     }
   })
 
-  _renderLegend(legendContainer, barDatasets, lineDatasets, onLegendToggle, onLineToggle, disabledSeries)
+  _renderLegend(legendContainer, barDatasetsReversed, lineDatasets, onLegendToggle, onLineToggle, legendOrder)
 }
 
 /**
@@ -171,57 +174,60 @@ export function renderChart(
  * @param {Object[]} lineDatasets
  * @param {function(string, boolean): void} onBarToggle
  * @param {function(string, boolean): void} onLineToggle
- * @param {string[]} disabledSeries - CC account names to show as grayed-out (not in chart)
+ * @param {Array<{label:string, disabled:boolean}>} legendOrder - ordered legend entries
  */
-function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, disabledSeries = []) {
+function _renderLegend(container, barDatasets, lineDatasets, onBarToggle, onLineToggle, legendOrder = []) {
   container.innerHTML = ''
 
-  // Bar entries
-  barDatasets.forEach((ds, i) => {
+  // Map label → { ds, datasetIndex } for active bar entries
+  const barByLabel = new Map(barDatasets.map((ds, i) => [ds.label, { ds, i }]))
+
+  // Bar + disabled entries in caller-specified order
+  legendOrder.forEach(({ label, disabled }) => {
     const row = document.createElement('div')
-    row.className = 'legend-row'
 
-    const cb = document.createElement('input')
-    cb.type = 'checkbox'
-    cb.checked = !ds.hidden
-    cb.addEventListener('change', () => {
-      if (chartInstance) {
-        chartInstance.setDatasetVisibility(i, cb.checked)
-        chartInstance.update()
-      }
-      onBarToggle(ds.label, cb.checked)
-    })
+    if (disabled) {
+      row.className = 'legend-row disabled'
+      row.title = 'Enable "Replace CU credit card payment with CC details" to show these accounts'
 
-    const swatch = document.createElement('span')
-    swatch.className = 'legend-swatch'
-    swatch.style.background = getColor(ds.label)
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'; cb.checked = false; cb.disabled = true
 
-    const label = document.createElement('span')
-    label.textContent = ds.label
+      const swatch = document.createElement('span')
+      swatch.className = 'legend-swatch'
+      swatch.style.background = 'var(--muted)'
 
-    row.append(cb, swatch, label)
-    container.appendChild(row)
-  })
+      const labelEl = document.createElement('span')
+      labelEl.textContent = label
 
-  // Disabled CC series (shown grayed out when "Replace CU CC payments" is off)
-  disabledSeries.forEach(label => {
-    const row = document.createElement('div')
-    row.className = 'legend-row disabled'
-    row.title = 'Enable "Replace CU credit card payment with CC details" to show these accounts'
+      row.append(cb, swatch, labelEl)
+    } else {
+      const entry = barByLabel.get(label)
+      if (!entry) return
+      const { ds, i } = entry
+      row.className = 'legend-row'
 
-    const cb = document.createElement('input')
-    cb.type = 'checkbox'
-    cb.checked = false
-    cb.disabled = true
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.checked = !ds.hidden
+      cb.addEventListener('change', () => {
+        if (chartInstance) {
+          chartInstance.setDatasetVisibility(i, cb.checked)
+          chartInstance.update()
+        }
+        onBarToggle(ds.label, cb.checked)
+      })
 
-    const swatch = document.createElement('span')
-    swatch.className = 'legend-swatch'
-    swatch.style.background = 'var(--muted)'
+      const swatch = document.createElement('span')
+      swatch.className = 'legend-swatch'
+      swatch.style.background = getColor(ds.label)
 
-    const labelEl = document.createElement('span')
-    labelEl.textContent = label
+      const labelEl = document.createElement('span')
+      labelEl.textContent = ds.label
 
-    row.append(cb, swatch, labelEl)
+      row.append(cb, swatch, labelEl)
+    }
+
     container.appendChild(row)
   })
 
